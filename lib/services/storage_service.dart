@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:encrypt/encrypt.dart' as encrypt;
 import '../models/routine_task.dart';
 
 class StorageService {
@@ -14,6 +16,11 @@ class StorageService {
   static const _firstLaunchKey = 'is_first_launch';
 
   late final SharedPreferences _prefs;
+
+  // NOTE: In a production app, this key should be securely stored (e.g., using flutter_secure_storage)
+  // or derived from a user password. Using a hardcoded key is still better than no encryption
+  // for backup files, but has limitations if the app is reverse-engineered.
+  static final _encryptionKey = encrypt.Key.fromUtf8('32CharLongPasswordForAES256Key!!');
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
@@ -211,13 +218,38 @@ class StorageService {
     for (final key in _prefs.getKeys()) {
       allData[key] = _prefs.get(key);
     }
-    return base64Encode(utf8.encode(jsonEncode(allData)));
+    final jsonString = jsonEncode(allData);
+
+    final iv = encrypt.IV.fromSecureRandom(16);
+    final encrypter = encrypt.Encrypter(encrypt.AES(_encryptionKey));
+
+    final encrypted = encrypter.encrypt(jsonString, iv: iv);
+
+    // Combine IV and encrypted data: [IV (16 bytes)][Encrypted Data]
+    final combined = Uint8List(iv.bytes.length + encrypted.bytes.length);
+    combined.setRange(0, iv.bytes.length, iv.bytes);
+    combined.setRange(iv.bytes.length, combined.length, encrypted.bytes);
+
+    return base64Encode(combined);
   }
 
   Future<bool> importData(String base64String) async {
     try {
-      final jsonString = utf8.decode(base64Decode(base64String));
-      final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
+      final combined = base64Decode(base64String);
+
+      // Extract IV (first 16 bytes)
+      final ivBytes = combined.sublist(0, 16);
+      final encryptedBytes = combined.sublist(16);
+
+      final iv = encrypt.IV(ivBytes);
+      final encrypter = encrypt.Encrypter(encrypt.AES(_encryptionKey));
+
+      final decrypted = encrypter.decrypt(
+        encrypt.Encrypted(encryptedBytes),
+        iv: iv,
+      );
+
+      final decoded = jsonDecode(decrypted) as Map<String, dynamic>;
       await _prefs.clear();
       for (final entry in decoded.entries) {
         final value = entry.value;
