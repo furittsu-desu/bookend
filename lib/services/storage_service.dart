@@ -15,6 +15,10 @@ class StorageService {
 
   late final SharedPreferences _prefs;
 
+  // In-memory caches for performance optimization
+  Map<String, Map<String, String>>? _journalCache;
+  Map<String, Map<String, dynamic>>? _metricsCache;
+
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
   }
@@ -129,14 +133,28 @@ class StorageService {
   // ── Journal ─────────────────────────────────────────────────────────
 
   Future<void> saveJournalEntry(String date, String text) async {
+    final timestamp = DateTime.now().toIso8601String();
     final data = {
       'text': text,
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': timestamp,
     };
     await _prefs.setString('$_journalPrefix$date', jsonEncode(data));
+
+    // Update cache if it exists
+    if (_journalCache != null) {
+      _journalCache![date] = {
+        'text': text,
+        'timestamp': timestamp,
+      };
+    }
   }
 
   String? loadJournalEntry(String date) {
+    // Try cache first
+    if (_journalCache != null && _journalCache!.containsKey(date)) {
+      return _journalCache![date]!['text'];
+    }
+
     final raw = _prefs.getString('$_journalPrefix$date');
     if (raw == null) return null;
     try {
@@ -149,9 +167,12 @@ class StorageService {
 
   Future<void> deleteJournalEntry(String date) async {
     await _prefs.remove('$_journalPrefix$date');
+    _journalCache?.remove(date);
   }
 
   Map<String, Map<String, String>> getAllJournalEntries() {
+    if (_journalCache != null) return _journalCache!;
+
     final entries = <String, Map<String, String>>{};
     for (final key in _prefs.getKeys()) {
       if (key.startsWith(_journalPrefix)) {
@@ -173,6 +194,7 @@ class StorageService {
         }
       }
     }
+    _journalCache = entries;
     return entries;
   }
 
@@ -181,15 +203,22 @@ class StorageService {
   Future<void> saveRoutineMetrics(String routineType, String date,
       DateTime start, DateTime end, Map<String, int> taskDurations) async {
     final key = 'metrics_${routineType}_$date';
-    final metrics = {
+    final metricsData = {
       'startTime': start.toIso8601String(),
       'endTime': end.toIso8601String(),
       'taskDurations': taskDurations, // id -> actual seconds
     };
-    await _prefs.setString(key, jsonEncode(metrics));
+    await _prefs.setString(key, jsonEncode(metricsData));
+
+    // Update cache if it exists
+    if (_metricsCache != null) {
+      _metricsCache![key] = metricsData;
+    }
   }
 
   Map<String, Map<String, dynamic>> getAllRoutineMetrics() {
+    if (_metricsCache != null) return _metricsCache!;
+
     final metrics = <String, Map<String, dynamic>>{};
     for (final key in _prefs.getKeys()) {
       if (key.startsWith('metrics_')) {
@@ -201,6 +230,7 @@ class StorageService {
         }
       }
     }
+    _metricsCache = metrics;
     return metrics;
   }
 
@@ -219,6 +249,11 @@ class StorageService {
       final jsonString = utf8.decode(base64Decode(base64String));
       final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
       await _prefs.clear();
+
+      // Clear caches
+      _journalCache = null;
+      _metricsCache = null;
+
       for (final entry in decoded.entries) {
         final value = entry.value;
         if (value is String) {
