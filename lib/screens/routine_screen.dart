@@ -73,13 +73,25 @@ class RoutineScreenState extends State<RoutineScreen> {
       final task = _tasks[index];
       task.isCompleted = value;
       
-      // Undo target duration if accidentally completed in Focus Mode
-      if (!value && task.previousTargetDuration != task.targetDuration) {
-        task.targetDuration = task.previousTargetDuration;
-        if (widget.routineType == 'morning') {
-          widget.storage.saveMorningTasks(_tasks);
-        } else {
-          widget.storage.saveNightTasks(_tasks);
+      // Handle Metrics & Undo for task durations
+      final today = widget.storage.getEffectiveDate();
+      if (!value) {
+        // Unchecked: remove from metrics so it's not double counted if completed again later
+        widget.storage.removeTaskFromMetrics(widget.routineType, today, task.id);
+
+        // Undo target duration if accidentally completed in Focus Mode
+        if (task.previousTargetDuration != task.targetDuration) {
+          task.targetDuration = task.previousTargetDuration;
+          if (widget.routineType == 'morning') {
+            widget.storage.saveMorningTasks(_tasks);
+          } else {
+            widget.storage.saveNightTasks(_tasks);
+          }
+        }
+      } else {
+        // Checked manually: if we have a lastFocusDuration, restore it to metrics
+        if (task.lastFocusDuration != null) {
+          widget.storage.addTaskToMetrics(widget.routineType, today, task.id, task.lastFocusDuration!);
         }
       }
 
@@ -91,7 +103,7 @@ class RoutineScreenState extends State<RoutineScreen> {
       if (_allCompleted && !wasAllCompleted) {
         _triggerCelebration();
       } else if (wasAllCompleted && !_allCompleted) {
-        final today = DateTime.now().toIso8601String().substring(0, 10);
+        final today = widget.storage.getEffectiveDate();
         widget.storage.removeStreakForToday(widget.routineType, today).then((_) {
           if (mounted) setState(() {});
         });
@@ -109,7 +121,7 @@ class RoutineScreenState extends State<RoutineScreen> {
     _showCelebration = true;
 
     // Streak logic
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = widget.storage.getEffectiveDate();
     
     if (widget.storage.getLastStreakDate(widget.routineType) != today) {
       widget.storage.incrementStreak(widget.routineType, today).then((_) {

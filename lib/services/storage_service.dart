@@ -15,6 +15,16 @@ class StorageService {
 
   late final SharedPreferences _prefs;
 
+  // Helper method to get the effective date
+  // If before 4:00 AM, returns yesterday's date
+  String getEffectiveDate() {
+    final now = DateTime.now();
+    if (now.hour < 4) {
+      return now.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10);
+    }
+    return now.toIso8601String().substring(0, 10);
+  }
+
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
   }
@@ -69,7 +79,7 @@ class StorageService {
   // ── Daily completion state ────────────────────────────────────────
 
   String _dayKey(String routineType) {
-    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final today = getEffectiveDate();
     return '$_completionPrefix${routineType}_$today';
   }
 
@@ -177,6 +187,46 @@ class StorageService {
   }
 
   // ── Metrics ─────────────────────────────────────────────────────────
+
+  Future<void> removeTaskFromMetrics(String routineType, String date, String taskId) async {
+    final key = 'metrics_${routineType}_$date';
+    final existingRaw = _prefs.getString(key);
+    if (existingRaw != null) {
+      try {
+        final existingMetrics = jsonDecode(existingRaw) as Map<String, dynamic>;
+        final existingDurations = existingMetrics['taskDurations'] as Map<String, dynamic>;
+        if (existingDurations.containsKey(taskId)) {
+          existingDurations.remove(taskId);
+          existingMetrics['taskDurations'] = existingDurations;
+          await _prefs.setString(key, jsonEncode(existingMetrics));
+        }
+      } catch (_) {}
+    }
+  }
+
+  Future<void> addTaskToMetrics(String routineType, String date, String taskId, int durationSeconds) async {
+    final key = 'metrics_${routineType}_$date';
+    final existingRaw = _prefs.getString(key);
+    if (existingRaw != null) {
+      try {
+        final existingMetrics = jsonDecode(existingRaw) as Map<String, dynamic>;
+        final existingDurations = existingMetrics['taskDurations'] as Map<String, dynamic>;
+        existingDurations[taskId] = (existingDurations[taskId] as int? ?? 0) + durationSeconds;
+        existingMetrics['taskDurations'] = existingDurations;
+        await _prefs.setString(key, jsonEncode(existingMetrics));
+      } catch (_) {}
+    } else {
+      // If there's no existing metric for today, we could optionally create a minimal one.
+      // But typically we only add back if we already have metrics.
+      // If we want to support adding metrics even if none existed (e.g. they only manually check tasks):
+      final metrics = {
+        'startTime': DateTime.now().toIso8601String(),
+        'endTime': DateTime.now().toIso8601String(),
+        'taskDurations': {taskId: durationSeconds},
+      };
+      await _prefs.setString(key, jsonEncode(metrics));
+    }
+  }
 
   Future<void> saveRoutineMetrics(String routineType, String date,
       DateTime start, DateTime end, Map<String, int> taskDurations) async {

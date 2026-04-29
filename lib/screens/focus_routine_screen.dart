@@ -81,6 +81,7 @@ class _FocusRoutineScreenState extends State<FocusRoutineScreen> {
     if (taskIndex != -1) {
       allTasks[taskIndex].previousTargetDuration = allTasks[taskIndex].targetDuration;
       allTasks[taskIndex].targetDuration = newTarget;
+      allTasks[taskIndex].lastFocusDuration = actualSeconds;
       if (widget.routineType == 'morning') {
         await widget.storage.saveMorningTasks(allTasks);
       } else {
@@ -103,7 +104,7 @@ class _FocusRoutineScreenState extends State<FocusRoutineScreen> {
       // Finished all tasks!
       await widget.storage.saveRoutineMetrics(
         widget.routineType, 
-        DateTime.now().toIso8601String().substring(0, 10),
+        widget.storage.getEffectiveDate(),
         _routineStartTime, 
         DateTime.now(), 
         _taskDurations,
