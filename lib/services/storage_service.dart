@@ -181,10 +181,53 @@ class StorageService {
   Future<void> saveRoutineMetrics(String routineType, String date,
       DateTime start, DateTime end, Map<String, int> taskDurations) async {
     final key = 'metrics_${routineType}_$date';
+
+    // Load existing metrics to merge
+    Map<String, dynamic>? existingMetrics;
+    final existingRaw = _prefs.getString(key);
+    if (existingRaw != null) {
+      try {
+        existingMetrics = jsonDecode(existingRaw) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    DateTime finalStart = start;
+    DateTime finalEnd = end;
+    Map<String, int> finalTaskDurations = Map<String, int>.from(taskDurations);
+
+    if (existingMetrics != null) {
+      try {
+        final existingStart = DateTime.parse(existingMetrics['startTime'] as String);
+        if (existingStart.isBefore(finalStart)) {
+          finalStart = existingStart;
+        }
+      } catch (_) {}
+
+      try {
+        final existingEnd = DateTime.parse(existingMetrics['endTime'] as String);
+        if (existingEnd.isAfter(finalEnd)) {
+          finalEnd = existingEnd;
+        }
+      } catch (_) {}
+
+      try {
+        final existingDurations = existingMetrics['taskDurations'] as Map<String, dynamic>;
+        existingDurations.forEach((k, v) {
+          if (!finalTaskDurations.containsKey(k)) {
+            finalTaskDurations[k] = v as int;
+          } else {
+            // Accumulate duration if the task was completed multiple times
+            // Alternatively, depending on the requirement, we sum it up.
+            finalTaskDurations[k] = (finalTaskDurations[k] ?? 0) + (v as int);
+          }
+        });
+      } catch (_) {}
+    }
+
     final metrics = {
-      'startTime': start.toIso8601String(),
-      'endTime': end.toIso8601String(),
-      'taskDurations': taskDurations, // id -> actual seconds
+      'startTime': finalStart.toIso8601String(),
+      'endTime': finalEnd.toIso8601String(),
+      'taskDurations': finalTaskDurations, // id -> actual seconds
     };
     await _prefs.setString(key, jsonEncode(metrics));
   }
