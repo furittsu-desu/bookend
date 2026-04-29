@@ -85,9 +85,19 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
     metrics.forEach((key, data) {
       try {
-        final start = DateTime.parse(data['startTime'] as String);
-        final end = DateTime.parse(data['endTime'] as String);
-        final diff = end.difference(start).inSeconds;
+        int diff = 0;
+        if (data.containsKey('taskDurations')) {
+          final tasksMap = data['taskDurations'] as Map<String, dynamic>;
+          for (final duration in tasksMap.values) {
+            diff += duration as int;
+          }
+        } else {
+          // Fallback if taskDurations doesn't exist
+          final start = DateTime.parse(data['startTime'] as String);
+          final end = DateTime.parse(data['endTime'] as String);
+          diff = end.difference(start).inSeconds;
+        }
+
         if (diff > 0 && diff < 86400) {
           if (key.startsWith('metrics_morning')) {
             morningTotal += diff;
