@@ -1,0 +1,3 @@
+## 2024-05-18 - Added Semantics and InkWell to Emoji Picker Buttons
+**Learning:** Pure text emojis used as buttons inside custom dialogs lack proper interaction feedback (like a ripple) and screen-reader semantics by default if wrapped only in `GestureDetector` and `Container`. Users with screen readers would have no context that the emoji is a selectable button.
+**Action:** When creating raw text-based or icon-based buttons that don't use standard Material Button widgets, always wrap them in `Semantics(button: true, label: ...)` and use `InkWell` inside a transparent `Material` widget to provide both visual and accessible interaction feedback.
