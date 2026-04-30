@@ -4,6 +4,7 @@ import 'package:bookend/services/storage_service.dart';
 import 'package:bookend/repositories/routine_repository.dart';
 import 'package:bookend/services/time_service.dart';
 import 'package:bookend/models/routine_task.dart';
+import 'package:bookend/services/notification_service.dart';
 
 class FakeStorage implements BaseStorage {
   Map<String, Map<String, dynamic>> boxes = {
@@ -48,15 +49,29 @@ class FakeStorage implements BaseStorage {
 
 class MockTimeService extends Mock implements TimeService {}
 
+class MockNotificationService extends Mock implements NotificationService {}
+
 void main() {
   late RoutineRepository repository;
   late FakeStorage storage;
   late MockTimeService mockTimeService;
+  late MockNotificationService mockNotificationService;
 
   setUp(() {
     storage = FakeStorage();
     mockTimeService = MockTimeService();
-    repository = RoutineRepository(storage, mockTimeService);
+    mockNotificationService = MockNotificationService();
+    
+    // Default stubs
+    when(() => mockNotificationService.cancelNudgeChain(any())).thenAnswer((_) async => {});
+    when(() => mockNotificationService.scheduleNudgeChain(
+      routineId: any(named: 'routineId'),
+      startTime: any(named: 'startTime'),
+      title: any(named: 'title'),
+    )).thenAnswer((_) async => {});
+
+    repository = RoutineRepository(storage, mockTimeService, 
+        notificationService: mockNotificationService);
   });
 
   group('RoutineRepository', () {
@@ -229,6 +244,79 @@ void main() {
         expect(result.length, 2);
         expect(result['2026-04-28']!['text'], 'Text 1');
         expect(result['2026-04-29']!['text'], 'Text 2');
+      });
+    });
+
+    group('Owl Protocol', () {
+      test('Completing first task cancels nudge chain', () async {
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+        when(() => mockNotificationService.cancelNudgeChain(any())).thenAnswer((_) async => {});
+
+        // Initial state: empty (nothing completed)
+        final state = {'task1': true};
+        await repository.saveCompletionState('morning', state);
+
+        verify(() => mockNotificationService.cancelNudgeChain('morning')).called(1);
+      });
+
+      test('Uncompleting all tasks re-schedules nudge chain', () async {
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+        // Initial state: something was completed
+        storage.boxes['activity']!['completion_morning_2026-04-30'] = {'task1': true};
+        storage.boxes['routines']!['morning_start_time'] = '08:00';
+        
+        when(() => mockNotificationService.scheduleNudgeChain(
+          routineId: any(named: 'routineId'),
+          startTime: any(named: 'startTime'),
+          title: any(named: 'title'),
+        )).thenAnswer((_) async => {});
+
+        // Action: uncheck everything
+        final state = {'task1': false};
+        await repository.saveCompletionState('morning', state);
+
+        verify(() => mockNotificationService.scheduleNudgeChain(
+          routineId: 'morning',
+          startTime: any(named: 'startTime'),
+          title: any(named: 'title'),
+        )).called(1);
+      });
+
+      test('Saving routine start time schedules nudges', () async {
+        when(() => mockNotificationService.scheduleNudgeChain(
+          routineId: any(named: 'routineId'),
+          startTime: any(named: 'startTime'),
+          title: any(named: 'title'),
+        )).thenAnswer((_) async => {});
+
+        await repository.saveRoutineStartTime('morning', '07:30');
+
+        expect(storage.boxes['routines']!['morning_start_time'], '07:30');
+        verify(() => mockNotificationService.scheduleNudgeChain(
+          routineId: 'morning',
+          startTime: any(named: 'startTime'),
+          title: any(named: 'title'),
+        )).called(1);
+      });
+
+      test('syncStreaks resets streak if missed more than 1 day', () async {
+        storage.boxes['activity']!['morning_last_streak_date'] = '2026-04-28';
+        storage.boxes['activity']!['morning_streak_count'] = 5;
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+
+        await repository.syncStreaks('morning');
+
+        expect(storage.boxes['activity']!['morning_streak_count'], 0);
+      });
+
+      test('syncStreaks keeps streak if last completed yesterday', () async {
+        storage.boxes['activity']!['morning_last_streak_date'] = '2026-04-29';
+        storage.boxes['activity']!['morning_streak_count'] = 5;
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+
+        await repository.syncStreaks('morning');
+
+        expect(storage.boxes['activity']!['morning_streak_count'], 5);
       });
     });
   });

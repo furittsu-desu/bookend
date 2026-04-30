@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import '../models/routine_task.dart';
 import '../repositories/routine_repository.dart';
+import '../repositories/metrics_repository.dart';
 
 class EditRoutineScreen extends StatefulWidget {
   final String routineType;
   final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
   final Color accentColor;
 
   const EditRoutineScreen({
     super.key,
     required this.routineType,
     required this.routineRepository,
+    required this.metricsRepository,
     required this.accentColor,
   });
 
@@ -20,6 +23,7 @@ class EditRoutineScreen extends StatefulWidget {
 
 class _EditRoutineScreenState extends State<EditRoutineScreen> {
   List<RoutineTask> _tasks = [];
+  String? _startTime;
 
   @override
   void initState() {
@@ -27,6 +31,7 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
     _tasks = widget.routineType == 'morning'
         ? widget.routineRepository.loadMorningTasks()
         : widget.routineRepository.loadNightTasks();
+    _startTime = widget.routineRepository.getRoutineStartTime(widget.routineType);
   }
 
   Future<void> _save() async {
@@ -35,6 +40,46 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
     } else {
       await widget.routineRepository.saveNightTasks(_tasks);
     }
+  }
+
+  Future<void> _pickTime() async {
+    TimeOfDay initialTime = TimeOfDay.now();
+    if (_startTime != null) {
+      final parts = _startTime!.split(':');
+      if (parts.length == 2) {
+        initialTime = TimeOfDay(
+          hour: int.parse(parts[0]),
+          minute: int.parse(parts[1]),
+        );
+      }
+    }
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: widget.accentColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      final timeIso = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+      _updateStartTime(timeIso);
+    }
+  }
+
+  Future<void> _updateStartTime(String timeIso) async {
+    await widget.routineRepository.saveRoutineStartTime(widget.routineType, timeIso);
+    setState(() {
+      _startTime = timeIso;
+    });
   }
 
   void _deleteTask(int index) {
@@ -225,90 +270,163 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
         elevation: 0,
       ),
       body: _tasks.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+            ? ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  Icon(
-                    Icons.playlist_add_rounded,
-                    size: 56,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withAlpha(60),
+                  _buildScheduleSection(),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text('TASKS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey)),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No tasks. Tap + to add one.',
-                    style: TextStyle(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withAlpha(120),
-                      fontSize: 16,
+                  const Center(child: Text('No tasks. Tap + to add one.')),
+                ],
+              )
+            : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _buildScheduleSection(),
                     ),
                   ),
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Text('TASKS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey)),
+                    ),
+                  ),
+                  SliverReorderableList(
+                    itemCount: _tasks.length,
+                    onReorder: (oldIndex, newIndex) {
+                      setState(() {
+                        if (newIndex > oldIndex) newIndex--;
+                        final item = _tasks.removeAt(oldIndex);
+                        _tasks.insert(newIndex, item);
+                      });
+                      _save();
+                    },
+                    itemBuilder: (context, index) {
+                      final task = _tasks[index];
+                      return _buildTaskTile(task, index);
+                    },
+                  ),
+                  const SliverPadding(padding: EdgeInsets.only(bottom: 80)),
                 ],
               ),
-            )
-          : ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: _tasks.length,
-              onReorder: (oldIndex, newIndex) {
-                setState(() {
-                  if (newIndex > oldIndex) newIndex--;
-                  final item = _tasks.removeAt(oldIndex);
-                  _tasks.insert(newIndex, item);
-                });
-                _save();
-              },
-              itemBuilder: (context, index) {
-                final task = _tasks[index];
-                return Card(
-                  key: ValueKey(task.id),
-                  margin:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  child: ListTile(
-                    leading: Text(
-                      task.emoji.isEmpty ? '📋' : task.emoji,
-                      style: const TextStyle(fontSize: 22),
-                    ),
-                    title: Text(
-                      task.title,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: task.targetDuration > 0
-                        ? Text('${task.targetDuration}s target')
-                        : const Text('Auto-learning mode'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_rounded, size: 20),
-                          onPressed: () => _showTaskDialog(task: task, index: index),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete_outline_rounded,
-                              size: 20, color: Colors.red.shade300),
-                          onPressed: () => _deleteTask(index),
-                        ),
-                        ReorderableDragStartListener(
-                          index: index,
-                          child: const Icon(Icons.drag_handle_rounded),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showTaskDialog(),
         backgroundColor: widget.accentColor,
         child: const Icon(Icons.add_rounded, color: Colors.white),
+      ),
+    );
+  }
+  Widget _buildScheduleSection() {
+    final avgStart = widget.metricsRepository.getAverageStartTime(widget.routineType);
+    final avgStartStr = avgStart != null 
+        ? '${avgStart.hour.toString().padLeft(2, '0')}:${avgStart.minute.toString().padLeft(2, '0')}'
+        : null;
+    final score = widget.metricsRepository.getConsistencyScore(widget.routineType);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text('SCHEDULE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.grey)),
+            ),
+            if (score > 0)
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Text('Consistency: $score%', style: TextStyle(fontSize: 12, color: widget.accentColor, fontWeight: FontWeight.bold)),
+              ),
+          ],
+        ),
+        Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          child: ListTile(
+            leading: Icon(Icons.notifications_active_rounded, color: widget.accentColor),
+            title: const Text('Nudge Start Time', style: TextStyle(fontWeight: FontWeight.w500)),
+            subtitle: Text(_startTime ?? 'Not scheduled'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _pickTime,
+          ),
+        ),
+        if (avgStartStr != null && avgStartStr != _startTime)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome_rounded, size: 14, color: widget.accentColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'You usually start at $avgStartStr. Sync?',
+                    style: TextStyle(fontSize: 12, color: widget.accentColor.withOpacity(0.8), fontWeight: FontWeight.w500),
+                  ),
+                ),
+                SizedBox(
+                  height: 32,
+                  child: TextButton(
+                    onPressed: () => _updateStartTime(avgStartStr),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                    child: const Text('Sync'),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+            child: Text(
+              'We\'ll nudge you if you haven\'t started your routine by this time.',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ),
+        const SizedBox(height: 12),
+      ],
+    );
+  }
+
+  Widget _buildTaskTile(RoutineTask task, int index) {
+    return Card(
+      key: ValueKey(task.id),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: ListTile(
+        leading: Text(
+          task.emoji.isEmpty ? '📋' : task.emoji,
+          style: const TextStyle(fontSize: 22),
+        ),
+        title: Text(
+          task.title,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        subtitle: task.targetDuration > 0
+            ? Text('${task.targetDuration}s target')
+            : const Text('Auto-learning mode'),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit_rounded, size: 20),
+              onPressed: () => _showTaskDialog(task: task, index: index),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete_outline_rounded,
+                  size: 20, color: Colors.red.shade300),
+              onPressed: () => _deleteTask(index),
+            ),
+            ReorderableDragStartListener(
+              index: index,
+              child: const Icon(Icons.drag_handle_rounded),
+            ),
+          ],
+        ),
       ),
     );
   }

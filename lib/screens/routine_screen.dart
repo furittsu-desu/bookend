@@ -49,6 +49,9 @@ class RoutineScreenState extends State<RoutineScreen> {
   void initState() {
     super.initState();
     _loadTasks();
+    widget.routineRepository.syncStreaks(widget.routineType).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void reload() {
@@ -105,35 +108,26 @@ class RoutineScreenState extends State<RoutineScreen> {
       _allCompleted =
           _tasks.isNotEmpty && _tasks.every((t) => t.isCompleted);
 
-      // Trigger celebration only on first completion of all tasks
       if (_allCompleted && !wasAllCompleted) {
         _triggerCelebration();
-      } else if (wasAllCompleted && !_allCompleted) {
-        final today = widget.routineRepository.timeService.getEffectiveDateString();
-        widget.routineRepository.removeStreakForToday(widget.routineType, today).then((_) {
-          if (mounted) setState(() {});
-        });
       }
     });
 
-    // Persist completion state
+    // Persist completion state - now handles streak increment/removal internally
     final state = {
       for (final t in _tasks) t.id: t.isCompleted,
     };
-    widget.routineRepository.saveCompletionState(widget.routineType, state);
+    widget.routineRepository.saveCompletionState(widget.routineType, state).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _triggerCelebration() {
     _showCelebration = true;
 
-    // Streak logic
     final today = widget.routineRepository.timeService.getEffectiveDateString();
     
-    if (widget.routineRepository.getLastStreakDate(widget.routineType) != today) {
-      widget.routineRepository.incrementStreak(widget.routineType, today).then((_) {
-        if (mounted) setState(() {});
-      });
-    }
+    // Streak logic moved to RoutineRepository.saveCompletionState
 
     Future.delayed(const Duration(milliseconds: 1600), () {
       if (mounted) setState(() => _showCelebration = false);
@@ -166,6 +160,7 @@ class RoutineScreenState extends State<RoutineScreen> {
         builder: (_) => EditRoutineScreen(
           routineType: widget.routineType,
           routineRepository: widget.routineRepository,
+          metricsRepository: widget.metricsRepository,
           accentColor: widget.accentColor,
         ),
       ),

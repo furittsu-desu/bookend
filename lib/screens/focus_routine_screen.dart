@@ -96,9 +96,10 @@ class _FocusRoutineScreenState extends State<FocusRoutineScreen> {
     }
 
     // Mark as completed for today
-    final state = widget.routineRepository.loadCompletionState(widget.routineType);
-    state[task.id] = true;
-    await widget.routineRepository.saveCompletionState(widget.routineType, state);
+    final currentState = widget.routineRepository.loadCompletionState(widget.routineType);
+    final newState = Map<String, bool>.from(currentState);
+    newState[task.id] = true;
+    await widget.routineRepository.saveCompletionState(widget.routineType, newState);
 
     // Move to next task or finish
     if (_currentIndex < widget.uncompletedTasks.length - 1) {
