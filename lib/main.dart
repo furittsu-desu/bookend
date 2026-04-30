@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/storage_service.dart';
+import 'services/hive_storage_service.dart';
+import 'services/storage_migration_service.dart';
+import 'services/time_service.dart';
 import 'repositories/routine_repository.dart';
 import 'repositories/metrics_repository.dart';
 import 'screens/home_screen.dart';
@@ -10,11 +13,16 @@ import 'screens/onboarding_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final storage = StorageService();
+  final BaseStorage storage = HiveStorageService();
   await storage.init();
 
-  final routineRepository = RoutineRepository(storage.prefs, storage.timeService);
-  final metricsRepository = MetricsRepository(storage.prefs);
+  // Handle migration from SharedPreferences
+  final migrationService = StorageMigrationService(storage);
+  await migrationService.migrateIfNeeded();
+
+  final timeService = TimeService();
+  final routineRepository = RoutineRepository(storage, timeService);
+  final metricsRepository = MetricsRepository(storage);
 
   runApp(BookendApp(
     storage: storage,
@@ -24,7 +32,7 @@ void main() async {
 }
 
 class BookendApp extends StatelessWidget {
-  final StorageService storage;
+  final BaseStorage storage;
   final RoutineRepository routineRepository;
   final MetricsRepository metricsRepository;
 
