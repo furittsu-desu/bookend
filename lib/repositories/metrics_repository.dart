@@ -1,26 +1,25 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/storage_service.dart';
 
 class MetricsRepository {
-  final SharedPreferences _prefs;
+  final BaseStorage _storage;
   Map<String, Map<String, dynamic>>? _metricsCache;
 
-  MetricsRepository(this._prefs);
+  MetricsRepository(this._storage);
 
   Future<void> removeTaskFromMetrics(String routineType, String date, String taskId) async {
     final key = 'metrics_${routineType}_$date';
-    final existingRaw = _prefs.getString(key);
-    if (existingRaw != null) {
+    final existingMetrics = _storage.get<Map>(key, boxName: 'activity');
+    if (existingMetrics != null) {
       try {
-        final existingMetrics = jsonDecode(existingRaw) as Map<String, dynamic>;
-        final existingDurations = existingMetrics['taskDurations'] as Map<String, dynamic>;
+        final existingDurations = Map<String, dynamic>.from(existingMetrics['taskDurations'] as Map);
         if (existingDurations.containsKey(taskId)) {
           existingDurations.remove(taskId);
-          existingMetrics['taskDurations'] = existingDurations;
-          await _prefs.setString(key, jsonEncode(existingMetrics));
+          final updatedMetrics = Map<String, dynamic>.from(existingMetrics);
+          updatedMetrics['taskDurations'] = existingDurations;
+          await _storage.set(key, updatedMetrics, boxName: 'activity');
           
           if (_metricsCache != null) {
-            _metricsCache![key] = existingMetrics;
+            _metricsCache![key] = updatedMetrics;
           }
         }
       } catch (_) {}
@@ -29,13 +28,13 @@ class MetricsRepository {
 
   Future<void> addTaskToMetrics(String routineType, String date, String taskId, int durationSeconds) async {
     final key = 'metrics_${routineType}_$date';
-    final existingRaw = _prefs.getString(key);
+    final existingMetrics = _storage.get<Map>(key, boxName: 'activity');
     Map<String, dynamic> finalMetrics;
     
-    if (existingRaw != null) {
+    if (existingMetrics != null) {
       try {
-        finalMetrics = jsonDecode(existingRaw) as Map<String, dynamic>;
-        final existingDurations = finalMetrics['taskDurations'] as Map<String, dynamic>;
+        finalMetrics = Map<String, dynamic>.from(existingMetrics);
+        final existingDurations = Map<String, dynamic>.from(finalMetrics['taskDurations'] as Map);
         existingDurations[taskId] = (existingDurations[taskId] as int? ?? 0) + durationSeconds;
         finalMetrics['taskDurations'] = existingDurations;
       } catch (_) {
@@ -49,7 +48,7 @@ class MetricsRepository {
       };
     }
     
-    await _prefs.setString(key, jsonEncode(finalMetrics));
+    await _storage.set(key, finalMetrics, boxName: 'activity');
     if (_metricsCache != null) {
       _metricsCache![key] = finalMetrics;
     }
@@ -59,13 +58,7 @@ class MetricsRepository {
       DateTime start, DateTime end, Map<String, int> taskDurations) async {
     final key = 'metrics_${routineType}_$date';
 
-    Map<String, dynamic>? existingMetrics;
-    final existingRaw = _prefs.getString(key);
-    if (existingRaw != null) {
-      try {
-        existingMetrics = jsonDecode(existingRaw) as Map<String, dynamic>;
-      } catch (_) {}
-    }
+    final existingMetrics = _storage.get<Map>(key, boxName: 'activity');
 
     DateTime finalStart = start;
     DateTime finalEnd = end;
@@ -87,12 +80,13 @@ class MetricsRepository {
       } catch (_) {}
 
       try {
-        final existingDurations = existingMetrics['taskDurations'] as Map<String, dynamic>;
+        final existingDurations = existingMetrics['taskDurations'] as Map;
         existingDurations.forEach((k, v) {
-          if (!finalTaskDurations.containsKey(k)) {
-            finalTaskDurations[k] = v as int;
+          final kStr = k as String;
+          if (!finalTaskDurations.containsKey(kStr)) {
+            finalTaskDurations[kStr] = v as int;
           } else {
-            finalTaskDurations[k] = (finalTaskDurations[k] ?? 0) + (v as int);
+            finalTaskDurations[kStr] = (finalTaskDurations[kStr] ?? 0) + (v as int);
           }
         });
       } catch (_) {}
@@ -104,7 +98,7 @@ class MetricsRepository {
       'taskDurations': finalTaskDurations,
     };
     
-    await _prefs.setString(key, jsonEncode(metricsData));
+    await _storage.set(key, metricsData, boxName: 'activity');
     if (_metricsCache != null) {
       _metricsCache![key] = metricsData;
     }
@@ -114,13 +108,12 @@ class MetricsRepository {
     if (_metricsCache != null) return _metricsCache!;
 
     final metrics = <String, Map<String, dynamic>>{};
-    for (final key in _prefs.getKeys()) {
+    final keys = _storage.getKeys(boxName: 'activity');
+    for (final key in keys) {
       if (key.startsWith('metrics_')) {
-        final raw = _prefs.getString(key);
-        if (raw != null) {
-          try {
-            metrics[key] = jsonDecode(raw) as Map<String, dynamic>;
-          } catch (_) {}
+        final data = _storage.get<Map>(key, boxName: 'activity');
+        if (data != null) {
+          metrics[key] = Map<String, dynamic>.from(data);
         }
       }
     }
