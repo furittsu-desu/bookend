@@ -40,6 +40,9 @@ dependencies:
   intl: ^0.20.2
   encrypt: ^5.0.3
   flutter_secure_storage: ^10.0.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +57,8 @@ dev_dependencies:
   mocktail: ^1.0.5
   flutter_driver:
     sdk: flutter
+  hive_generator: ^2.0.1
+  build_runner: ^2.4.13
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

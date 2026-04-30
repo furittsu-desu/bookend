@@ -1,14 +1,25 @@
+import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
+
+part 'routine_task.g.dart';
 
 const _uuid = Uuid();
 
+@HiveType(typeId: 0)
 class RoutineTask {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   String title;
+  @HiveField(2)
   String emoji;
+  @HiveField(3)
   bool isCompleted;
+  @HiveField(4)
   int targetDuration; // in seconds, 0 means not set
+  @HiveField(5)
   int previousTargetDuration; // for undo
+  @HiveField(6)
   int? lastFocusDuration; // added to store focus duration if task is unchecked
 
   RoutineTask({

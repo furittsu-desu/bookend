@@ -1,7 +1,6 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/routine_task.dart';
 import '../services/time_service.dart';
+import '../services/storage_service.dart';
 
 class RoutineRepository {
   static const _morningKey = 'morning_tasks';
@@ -11,7 +10,6 @@ class RoutineRepository {
   static const _nightStreakCountKey = 'night_streak_count';
   static const _morningLastStreakDateKey = 'morning_last_streak_date';
   static const _nightLastStreakDateKey = 'night_last_streak_date';
-  static const _journalPrefix = 'journal_';
   static const _onboardingKey = 'onboarding_completed';
 
   static final List<RoutineTask> defaultMorningTasks = [
@@ -28,8 +26,8 @@ class RoutineRepository {
     RoutineTask(title: 'Sleep', emoji: '🌙'),
   ];
 
-  final SharedPreferences _prefs;
-  final TimeService _timeService;
+  final BaseStorage _storage;
+  final TimeService timeService;
 
   /// In-memory cache for journal entries.
   /// Keys are dates in YYYY-MM-DD format.
@@ -38,28 +36,23 @@ class RoutineRepository {
   /// Flag indicating if [_journalCache] contains all entries from storage.
   bool _isCacheComplete = false;
 
-  RoutineRepository(this._prefs, this._timeService);
+  RoutineRepository(this._storage, this.timeService);
 
-  bool isOnboardingCompleted() => _prefs.getBool(_onboardingKey) ?? false;
+  bool isOnboardingCompleted() => _storage.get<bool>(_onboardingKey, boxName: 'meta') ?? false;
 
   Future<void> completeOnboarding() async {
-    await _prefs.setBool(_onboardingKey, true);
+    await _storage.set(_onboardingKey, true, boxName: 'meta');
   }
 
   // ── Routine CRUD ──────────────────────────────────────────────────
 
   List<RoutineTask> _loadTasks(String key) {
-    final raw = _prefs.getString(key);
-    if (raw == null) return [];
-    final list = jsonDecode(raw) as List;
-    return list
-        .map((e) => RoutineTask.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final list = _storage.get<List>(key, boxName: 'routines');
+    return list?.cast<RoutineTask>() ?? [];
   }
 
   Future<void> _saveTasks(String key, List<RoutineTask> tasks) async {
-    final json = jsonEncode(tasks.map((t) => t.toJson()).toList());
-    await _prefs.setString(key, json);
+    await _storage.set(key, tasks, boxName: 'routines');
   }
 
   List<RoutineTask> loadMorningTasks() => _loadTasks(_morningKey);
@@ -73,33 +66,30 @@ class RoutineRepository {
   // ── Daily completion state ────────────────────────────────────────
 
   String _dayKey(String routineType) {
-    final today = _timeService.getEffectiveDateString();
+    final today = timeService.getEffectiveDateString();
     return '$_completionPrefix${routineType}_$today';
   }
 
   Future<void> saveCompletionState(
       String routineType, Map<String, bool> state) async {
-    final json = jsonEncode(state);
-    await _prefs.setString(_dayKey(routineType), json);
+    await _storage.set(_dayKey(routineType), state, boxName: 'activity');
   }
 
   Map<String, bool> loadCompletionState(String routineType) {
-    final raw = _prefs.getString(_dayKey(routineType));
-    if (raw == null) return {};
-    final map = jsonDecode(raw) as Map<String, dynamic>;
-    return map.map((k, v) => MapEntry(k, v as bool));
+    final map = _storage.get<Map>(_dayKey(routineType), boxName: 'activity');
+    return map?.cast<String, bool>() ?? {};
   }
 
   // ── Streak Counter ──────────────────────────────────────────────────
 
   int getStreak(String routineType) {
     final key = routineType == 'morning' ? _morningStreakCountKey : _nightStreakCountKey;
-    return _prefs.getInt(key) ?? 0;
+    return _storage.get<int>(key, boxName: 'activity') ?? 0;
   }
   
   String? getLastStreakDate(String routineType) {
     final key = routineType == 'morning' ? _morningLastStreakDateKey : _nightLastStreakDateKey;
-    return _prefs.getString(key);
+    return _storage.get<String>(key, boxName: 'activity');
   }
 
   Future<void> incrementStreak(String routineType, String date) async {
@@ -107,13 +97,13 @@ class RoutineRepository {
     final dateKey = routineType == 'morning' ? _morningLastStreakDateKey : _nightLastStreakDateKey;
     
     final current = getStreak(routineType);
-    await _prefs.setInt(countKey, current + 1);
-    await _prefs.setString(dateKey, date);
+    await _storage.set(countKey, current + 1, boxName: 'activity');
+    await _storage.set(dateKey, date, boxName: 'activity');
   }
 
   Future<void> resetStreak(String routineType) async {
     final key = routineType == 'morning' ? _morningStreakCountKey : _nightStreakCountKey;
-    await _prefs.setInt(key, 0);
+    await _storage.set(key, 0, boxName: 'activity');
   }
 
   Future<void> removeStreakForToday(String routineType, String today) async {
@@ -123,9 +113,9 @@ class RoutineRepository {
       
       final current = getStreak(routineType);
       if (current > 0) {
-        await _prefs.setInt(countKey, current - 1);
+        await _storage.set(countKey, current - 1, boxName: 'activity');
       }
-      await _prefs.setString(dateKey, '');
+      await _storage.set(dateKey, '', boxName: 'activity');
     }
   }
 
@@ -141,7 +131,7 @@ class RoutineRepository {
       'text': text,
       'timestamp': timestamp,
     };
-    await _prefs.setString('$_journalPrefix$date', jsonEncode(data));
+    await _storage.set(date, data, boxName: 'journal');
 
     _journalCache[date] = {
       'text': text,
@@ -149,38 +139,27 @@ class RoutineRepository {
     };
   }
 
-  /// Loads a journal entry for the given [date].
-  ///
-  /// Checks the in-memory cache first. On a cache miss, it reads from persistent storage.
-  /// If the stored data is valid JSON, it returns the 'text' field and populates the cache.
-  /// If the data is malformed or in an old format, it returns the raw string as a fallback.
   String? loadJournalEntry(String date) {
     if (_journalCache.containsKey(date)) {
       return _journalCache[date]!['text'];
     }
 
-    final raw = _prefs.getString('$_journalPrefix$date');
-    if (raw == null) return null;
-    try {
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      final text = decoded['text'] as String;
-      _journalCache[date] = {
-        'text': text,
-        'timestamp': decoded['timestamp'] as String? ?? '',
-      };
-      return text;
-    } catch (_) {
-      _journalCache[date] = {
-        'text': raw,
-        'timestamp': '',
-      };
-      return raw;
-    }
+    final data = _storage.get<Map>(date, boxName: 'journal');
+    if (data == null) return null;
+    
+    final text = data['text'] as String? ?? '';
+    final timestamp = data['timestamp'] as String? ?? '';
+    
+    _journalCache[date] = {
+      'text': text,
+      'timestamp': timestamp,
+    };
+    return text;
   }
 
   /// Deletes the journal entry for the given [date] from both storage and cache.
   Future<void> deleteJournalEntry(String date) async {
-    await _prefs.remove('$_journalPrefix$date');
+    await _storage.remove(date, boxName: 'journal');
     _journalCache.remove(date);
   }
 
@@ -190,25 +169,15 @@ class RoutineRepository {
   Map<String, Map<String, String>> getAllJournalEntries() {
     if (_isCacheComplete) return _journalCache;
 
-    for (final key in _prefs.getKeys()) {
-      if (key.startsWith(_journalPrefix)) {
-        final date = key.substring(_journalPrefix.length);
-        if (!_journalCache.containsKey(date)) {
-          final raw = _prefs.getString(key);
-          if (raw != null && raw.isNotEmpty) {
-            try {
-              final decoded = jsonDecode(raw) as Map<String, dynamic>;
-              _journalCache[date] = {
-                'text': decoded['text'] as String? ?? '',
-                'timestamp': decoded['timestamp'] as String? ?? '',
-              };
-            } catch (_) {
-              _journalCache[date] = {
-                'text': raw,
-                'timestamp': '',
-              };
-            }
-          }
+    final keys = _storage.getKeys(boxName: 'journal');
+    for (final date in keys) {
+      if (!_journalCache.containsKey(date)) {
+        final data = _storage.get<Map>(date, boxName: 'journal');
+        if (data != null) {
+          _journalCache[date] = {
+            'text': data['text'] as String? ?? '',
+            'timestamp': data['timestamp'] as String? ?? '',
+          };
         }
       }
     }

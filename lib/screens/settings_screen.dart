@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../services/storage_service.dart';
 
 class SettingsScreen extends StatelessWidget {
-  final StorageService storage;
+  final BaseStorage storage;
   final Color accentColor;
 
   const SettingsScreen({
