@@ -71,5 +71,19 @@ void main() {
       verify(() => mockPrefs.setInt('morning_streak_count', 3)).called(1);
       verify(() => mockPrefs.setString('morning_last_streak_date', '2026-04-29')).called(1);
     });
+
+    group('Journal', () {
+      test('loadJournalEntry returns null when no entry exists', () {
+        when(() => mockPrefs.getString(any())).thenReturn(null);
+        expect(repository.loadJournalEntry('2026-04-29'), isNull);
+      });
+
+      test('loadJournalEntry returns text from valid JSON entry', () {
+        final json = '{"text":"Hello World","timestamp":"2026-04-29T12:00:00"}';
+        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(json);
+        
+        expect(repository.loadJournalEntry('2026-04-29'), 'Hello World');
+      });
+    });
   });
 }
