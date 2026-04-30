@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import '../models/routine_task.dart';
-import '../services/storage_service.dart';
+import '../repositories/routine_repository.dart';
 
 class EditRoutineScreen extends StatefulWidget {
   final String routineType;
-  final StorageService storage;
+  final RoutineRepository routineRepository;
   final Color accentColor;
 
   const EditRoutineScreen({
     super.key,
     required this.routineType,
-    required this.storage,
+    required this.routineRepository,
     required this.accentColor,
   });
 
@@ -25,15 +25,15 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
   void initState() {
     super.initState();
     _tasks = widget.routineType == 'morning'
-        ? widget.storage.loadMorningTasks()
-        : widget.storage.loadNightTasks();
+        ? widget.routineRepository.loadMorningTasks()
+        : widget.routineRepository.loadNightTasks();
   }
 
   Future<void> _save() async {
     if (widget.routineType == 'morning') {
-      await widget.storage.saveMorningTasks(_tasks);
+      await widget.routineRepository.saveMorningTasks(_tasks);
     } else {
-      await widget.storage.saveNightTasks(_tasks);
+      await widget.routineRepository.saveNightTasks(_tasks);
     }
   }
 
@@ -61,7 +61,6 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
     final emojiController = TextEditingController(text: task?.emoji ?? '');
     final durationController = TextEditingController(text: (task?.targetDuration ?? 0).toString());
     
-    // Persistent controllers for the duration fields to prevent focus loss on rebuild
     int initialTotalSecs = task?.targetDuration ?? 0;
     final minController = TextEditingController(text: (initialTotalSecs ~/ 60).toString().padLeft(2, '0'));
     final secController = TextEditingController(text: (initialTotalSecs % 60).toString().padLeft(2, '0'));
@@ -73,7 +72,7 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(isEditing ? 'Edit Task' : 'Add Task'),
           content: SizedBox(
-            width: 300, // Fixed width to avoid IntrinsicWidth layout issues in AlertDialog
+            width: 300,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -100,6 +99,7 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    key: const ValueKey('task_emoji_field'),
                     controller: emojiController,
                     decoration: const InputDecoration(
                       labelText: 'Custom Emoji',
@@ -111,6 +111,7 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    key: const ValueKey('task_title_field'),
                     controller: titleController,
                     decoration: const InputDecoration(
                       labelText: 'Task name',
@@ -128,6 +129,7 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
                       SizedBox(
                         width: 70,
                         child: TextField(
+                          key: const ValueKey('task_min_field'),
                           controller: minController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,
@@ -151,6 +153,7 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
                       SizedBox(
                         width: 70,
                         child: TextField(
+                          key: const ValueKey('task_sec_field'),
                           controller: secController,
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.center,

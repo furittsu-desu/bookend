@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/routine_task.dart';
 import '../services/storage_service.dart';
+import '../repositories/routine_repository.dart';
+import '../repositories/metrics_repository.dart';
 import '../widgets/animated_task_tile.dart';
 import '../widgets/progress_ring.dart';
 import '../widgets/completion_celebration.dart';
@@ -13,6 +15,8 @@ import 'settings_screen.dart';
 class RoutineScreen extends StatefulWidget {
   final String routineType; // 'morning' or 'night'
   final StorageService storage;
+  final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
   final Color accentColor;
   final Color backgroundColor;
   final String title;
@@ -23,6 +27,8 @@ class RoutineScreen extends StatefulWidget {
     super.key,
     required this.routineType,
     required this.storage,
+    required this.routineRepository,
+    required this.metricsRepository,
     required this.accentColor,
     required this.backgroundColor,
     required this.title,
@@ -51,12 +57,12 @@ class RoutineScreenState extends State<RoutineScreen> {
 
   void _loadTasks() {
     final tasks = widget.routineType == 'morning'
-        ? widget.storage.loadMorningTasks()
-        : widget.storage.loadNightTasks();
+        ? widget.routineRepository.loadMorningTasks()
+        : widget.routineRepository.loadNightTasks();
 
     // Restore today's completion state
     final completionState =
-        widget.storage.loadCompletionState(widget.routineType);
+        widget.routineRepository.loadCompletionState(widget.routineType);
     for (final task in tasks) {
       task.isCompleted = completionState[task.id] ?? false;
     }
@@ -74,24 +80,24 @@ class RoutineScreenState extends State<RoutineScreen> {
       task.isCompleted = value;
       
       // Handle Metrics & Undo for task durations
-      final today = widget.storage.getEffectiveDate();
+      final today = widget.storage.timeService.getEffectiveDateString();
       if (!value) {
         // Unchecked: remove from metrics so it's not double counted if completed again later
-        widget.storage.removeTaskFromMetrics(widget.routineType, today, task.id);
+        widget.metricsRepository.removeTaskFromMetrics(widget.routineType, today, task.id);
 
         // Undo target duration if accidentally completed in Focus Mode
         if (task.previousTargetDuration != task.targetDuration) {
           task.targetDuration = task.previousTargetDuration;
           if (widget.routineType == 'morning') {
-            widget.storage.saveMorningTasks(_tasks);
+            widget.routineRepository.saveMorningTasks(_tasks);
           } else {
-            widget.storage.saveNightTasks(_tasks);
+            widget.routineRepository.saveNightTasks(_tasks);
           }
         }
       } else {
         // Checked manually: if we have a lastFocusDuration, restore it to metrics
         if (task.lastFocusDuration != null) {
-          widget.storage.addTaskToMetrics(widget.routineType, today, task.id, task.lastFocusDuration!);
+          widget.metricsRepository.addTaskToMetrics(widget.routineType, today, task.id, task.lastFocusDuration!);
         }
       }
 
@@ -103,8 +109,8 @@ class RoutineScreenState extends State<RoutineScreen> {
       if (_allCompleted && !wasAllCompleted) {
         _triggerCelebration();
       } else if (wasAllCompleted && !_allCompleted) {
-        final today = widget.storage.getEffectiveDate();
-        widget.storage.removeStreakForToday(widget.routineType, today).then((_) {
+        final today = widget.storage.timeService.getEffectiveDateString();
+        widget.routineRepository.removeStreakForToday(widget.routineType, today).then((_) {
           if (mounted) setState(() {});
         });
       }
@@ -114,17 +120,17 @@ class RoutineScreenState extends State<RoutineScreen> {
     final state = {
       for (final t in _tasks) t.id: t.isCompleted,
     };
-    widget.storage.saveCompletionState(widget.routineType, state);
+    widget.routineRepository.saveCompletionState(widget.routineType, state);
   }
 
   void _triggerCelebration() {
     _showCelebration = true;
 
     // Streak logic
-    final today = widget.storage.getEffectiveDate();
+    final today = widget.storage.timeService.getEffectiveDateString();
     
-    if (widget.storage.getLastStreakDate(widget.routineType) != today) {
-      widget.storage.incrementStreak(widget.routineType, today).then((_) {
+    if (widget.routineRepository.getLastStreakDate(widget.routineType) != today) {
+      widget.routineRepository.incrementStreak(widget.routineType, today).then((_) {
         if (mounted) setState(() {});
       });
     }
@@ -139,7 +145,7 @@ class RoutineScreenState extends State<RoutineScreen> {
   }
 
   void _showJournalPrompt(String date) {
-    if (widget.storage.loadJournalEntry(date) != null) return;
+    if (widget.routineRepository.loadJournalEntry(date) != null) return;
 
     showModalBottomSheet(
       context: context,
@@ -148,7 +154,7 @@ class RoutineScreenState extends State<RoutineScreen> {
       builder: (ctx) => JournalPromptBottomSheet(
         accentColor: widget.accentColor,
         onSave: (text) {
-          widget.storage.saveJournalEntry(date, text);
+          widget.routineRepository.saveJournalEntry(date, text);
         },
       ),
     );
@@ -159,7 +165,7 @@ class RoutineScreenState extends State<RoutineScreen> {
       MaterialPageRoute(
         builder: (_) => EditRoutineScreen(
           routineType: widget.routineType,
-          storage: widget.storage,
+          routineRepository: widget.routineRepository,
           accentColor: widget.accentColor,
         ),
       ),
@@ -171,7 +177,8 @@ class RoutineScreenState extends State<RoutineScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => InsightsScreen(
-          storage: widget.storage,
+          metricsRepository: widget.metricsRepository,
+          routineRepository: widget.routineRepository,
           accentColor: widget.accentColor,
         ),
       ),
@@ -197,7 +204,9 @@ class RoutineScreenState extends State<RoutineScreen> {
       MaterialPageRoute(
         builder: (_) => FocusRoutineScreen(
           routineType: widget.routineType,
-          storage: widget.storage,
+          routineRepository: widget.routineRepository,
+          metricsRepository: widget.metricsRepository,
+          timeService: widget.storage.timeService,
           accentColor: widget.accentColor,
           uncompletedTasks: uncompleted,
         ),
@@ -318,9 +327,9 @@ class RoutineScreenState extends State<RoutineScreen> {
                     widget.accentColor.withAlpha(30),
               ),
               const SizedBox(height: 8),
-              if (widget.storage.getStreak(widget.routineType) > 0) ...[
+              if (widget.routineRepository.getStreak(widget.routineType) > 0) ...[
                 Text(
-                  '🔥 ${widget.storage.getStreak(widget.routineType)} Day Streak',
+                  '🔥 ${widget.routineRepository.getStreak(widget.routineType)} Day Streak',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,

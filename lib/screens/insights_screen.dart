@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../services/storage_service.dart';
+import '../repositories/routine_repository.dart';
+import '../repositories/metrics_repository.dart';
 
 class InsightsScreen extends StatefulWidget {
-  final StorageService storage;
+  final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
   final Color accentColor;
 
   const InsightsScreen({
     super.key,
-    required this.storage,
+    required this.routineRepository,
+    required this.metricsRepository,
     required this.accentColor,
   });
 
@@ -37,7 +40,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
 
     if (confirmed == true) {
-      await widget.storage.deleteJournalEntry(date);
+      await widget.routineRepository.deleteJournalEntry(date);
       setState(() {});
     }
   }
@@ -72,7 +75,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
 
     if (newText != null && newText.isNotEmpty && newText != currentText) {
-      await widget.storage.saveJournalEntry(date, newText);
+      await widget.routineRepository.saveJournalEntry(date, newText);
       setState(() {});
     }
   }
@@ -92,7 +95,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             diff += duration as int;
           }
         } else {
-          // Fallback if taskDurations doesn't exist
+          // Fallback
           final start = DateTime.parse(data['startTime'] as String);
           final end = DateTime.parse(data['endTime'] as String);
           diff = end.difference(start).inSeconds;
@@ -257,8 +260,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
   Widget _buildTaskBreakdown(Map<String, Map<String, dynamic>> metrics) {
     if (metrics.isEmpty) return const SizedBox.shrink();
     
-    final morningTasks = widget.storage.loadMorningTasks();
-    final nightTasks = widget.storage.loadNightTasks();
+    final morningTasks = widget.routineRepository.loadMorningTasks();
+    final nightTasks = widget.routineRepository.loadNightTasks();
     final Map<String, String> taskIdToName = {};
     for (final t in morningTasks) {
       taskIdToName[t.id] = '${t.emoji} ${t.title}'.trim();
@@ -334,10 +337,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final morningStreak = widget.storage.getStreak('morning');
-    final nightStreak = widget.storage.getStreak('night');
-    final entries = widget.storage.getAllJournalEntries();
-    final metrics = widget.storage.getAllRoutineMetrics();
+    final morningStreak = widget.routineRepository.getStreak('morning');
+    final nightStreak = widget.routineRepository.getStreak('night');
+    final entries = widget.routineRepository.getAllJournalEntries();
+    final metrics = widget.metricsRepository.getAllRoutineMetrics();
     // Sort dates newest first
     final sortedDates = entries.keys.toList()
       ..sort((a, b) => b.compareTo(a));
@@ -364,7 +367,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   child: _StatsCard(
                     title: 'Morning',
                     streak: morningStreak, 
-                    accentColor: const Color(0xFFE8A838) // morningAccent
+                    accentColor: const Color(0xFFE8A838) 
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -372,7 +375,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   child: _StatsCard(
                     title: 'Night',
                     streak: nightStreak, 
-                    accentColor: const Color(0xFF6C63FF) // nightAccent
+                    accentColor: const Color(0xFF6C63FF) 
                   ),
                 ),
               ],
@@ -422,8 +425,6 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
   }
 }
-
-// ── Stats Card ────────────────────────────────────────────────────────
 
 class _MetricsCard extends StatelessWidget {
   final String title;
@@ -584,8 +585,6 @@ class _StatsCard extends StatelessWidget {
   }
 }
 
-// ── Journal Entry Card ────────────────────────────────────────────────
-
 class _JournalEntryCard extends StatelessWidget {
   final String date;
   final String text;
@@ -703,8 +702,6 @@ class _JournalEntryCard extends StatelessWidget {
     );
   }
 }
-
-// ── Empty State ───────────────────────────────────────────────────────
 
 class _EmptyJournalState extends StatelessWidget {
   final Color accentColor;

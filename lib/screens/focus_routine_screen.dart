@@ -2,18 +2,24 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../models/routine_task.dart';
-import '../services/storage_service.dart';
+import '../repositories/routine_repository.dart';
+import '../repositories/metrics_repository.dart';
+import '../services/time_service.dart';
 
 class FocusRoutineScreen extends StatefulWidget {
   final String routineType;
-  final StorageService storage;
+  final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
+  final TimeService timeService;
   final Color accentColor;
   final List<RoutineTask> uncompletedTasks;
 
   const FocusRoutineScreen({
     super.key,
     required this.routineType,
-    required this.storage,
+    required this.routineRepository,
+    required this.metricsRepository,
+    required this.timeService,
     required this.accentColor,
     required this.uncompletedTasks,
   });
@@ -69,13 +75,13 @@ class _FocusRoutineScreenState extends State<FocusRoutineScreen> {
       newTarget = (task.targetDuration * 0.7 + actualSeconds * 0.3).round();
     }
     
-    // Prevent target from being 0 accidentally (e.g. if they click done instantly)
+    // Prevent target from being 0 accidentally
     if (newTarget < 5) newTarget = 5;
 
     // Load full list of tasks to update and save
     final allTasks = widget.routineType == 'morning'
-        ? widget.storage.loadMorningTasks()
-        : widget.storage.loadNightTasks();
+        ? widget.routineRepository.loadMorningTasks()
+        : widget.routineRepository.loadNightTasks();
         
     final taskIndex = allTasks.indexWhere((t) => t.id == task.id);
     if (taskIndex != -1) {
@@ -83,16 +89,16 @@ class _FocusRoutineScreenState extends State<FocusRoutineScreen> {
       allTasks[taskIndex].targetDuration = newTarget;
       allTasks[taskIndex].lastFocusDuration = actualSeconds;
       if (widget.routineType == 'morning') {
-        await widget.storage.saveMorningTasks(allTasks);
+        await widget.routineRepository.saveMorningTasks(allTasks);
       } else {
-        await widget.storage.saveNightTasks(allTasks);
+        await widget.routineRepository.saveNightTasks(allTasks);
       }
     }
 
     // Mark as completed for today
-    final state = widget.storage.loadCompletionState(widget.routineType);
+    final state = widget.routineRepository.loadCompletionState(widget.routineType);
     state[task.id] = true;
-    await widget.storage.saveCompletionState(widget.routineType, state);
+    await widget.routineRepository.saveCompletionState(widget.routineType, state);
 
     // Move to next task or finish
     if (_currentIndex < widget.uncompletedTasks.length - 1) {
@@ -102,9 +108,9 @@ class _FocusRoutineScreenState extends State<FocusRoutineScreen> {
       _startTimer();
     } else {
       // Finished all tasks!
-      await widget.storage.saveRoutineMetrics(
+      await widget.metricsRepository.saveRoutineMetrics(
         widget.routineType, 
-        widget.storage.getEffectiveDate(),
+        widget.timeService.getEffectiveDateString(),
         _routineStartTime, 
         DateTime.now(), 
         _taskDurations,

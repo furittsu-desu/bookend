@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import '../models/routine_task.dart';
 import '../services/storage_service.dart';
+import '../repositories/routine_repository.dart';
+import '../repositories/metrics_repository.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   final StorageService storage;
+  final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
 
-  const OnboardingScreen({super.key, required this.storage});
+  const OnboardingScreen({
+    super.key,
+    required this.storage,
+    required this.routineRepository,
+    required this.metricsRepository,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -34,13 +43,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _finishOnboarding() async {
-    await widget.storage.saveMorningTasks(_morningTasks);
-    await widget.storage.saveNightTasks(_nightTasks);
-    await widget.storage.completeOnboarding();
+    await widget.routineRepository.saveMorningTasks(_morningTasks);
+    await widget.routineRepository.saveNightTasks(_nightTasks);
+    await widget.routineRepository.completeOnboarding();
     
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => HomeScreen(storage: widget.storage)),
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(
+            storage: widget.storage,
+            routineRepository: widget.routineRepository,
+            metricsRepository: widget.metricsRepository,
+          ),
+        ),
       );
     }
   }
@@ -97,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Your Morning',
       subtitle: 'What helps you start your day right?',
       tasks: _morningTasks,
-      suggestions: StorageService.defaultMorningTasks,
+      suggestions: RoutineRepository.defaultMorningTasks,
       accentColor: const Color(0xFFE8A838),
     );
   }
@@ -107,7 +122,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Your Evening',
       subtitle: 'How do you prefer to wind down?',
       tasks: _nightTasks,
-      suggestions: StorageService.defaultNightTasks,
+      suggestions: RoutineRepository.defaultNightTasks,
       accentColor: const Color(0xFF6C63FF),
     );
   }
@@ -301,6 +316,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
           
           ElevatedButton(
+            key: const ValueKey('onboarding_next_button'),
             onPressed: _nextPage,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.black,

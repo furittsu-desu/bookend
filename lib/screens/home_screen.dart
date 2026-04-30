@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../services/storage_service.dart';
+import '../repositories/routine_repository.dart';
+import '../repositories/metrics_repository.dart';
 import 'routine_screen.dart';
 
 /// Enables mouse-drag scrolling on desktop for PageView.
@@ -15,8 +17,15 @@ class _DesktopDragScrollBehavior extends MaterialScrollBehavior {
 
 class HomeScreen extends StatefulWidget {
   final StorageService storage;
+  final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
 
-  const HomeScreen({super.key, required this.storage});
+  const HomeScreen({
+    super.key,
+    required this.storage,
+    required this.routineRepository,
+    required this.metricsRepository,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -93,6 +102,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: _morningKey,
                   routineType: 'morning',
                   storage: widget.storage,
+                  routineRepository: widget.routineRepository,
+                  metricsRepository: widget.metricsRepository,
                   accentColor: _morningAccent,
                   backgroundColor: _morningBg,
                   title: 'Good Morning',
@@ -103,6 +114,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   key: _nightKey,
                   routineType: 'night',
                   storage: widget.storage,
+                  routineRepository: widget.routineRepository,
+                  metricsRepository: widget.metricsRepository,
                   accentColor: _nightAccent,
                   backgroundColor: _nightBg,
                   title: 'Good Night',
