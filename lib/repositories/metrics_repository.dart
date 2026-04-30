@@ -120,4 +120,60 @@ class MetricsRepository {
     _metricsCache = metrics;
     return metrics;
   }
+
+  /// Calculates the average start time for a routine over the last [days].
+  /// Returns a [DateTime] with the current date but the average hour/minute.
+  DateTime? getAverageStartTime(String routineType, {int days = 7}) {
+    final allMetrics = getAllRoutineMetrics();
+    final routineKeys = allMetrics.keys
+        .where((k) => k.startsWith('metrics_${routineType}_'))
+        .toList();
+
+    if (routineKeys.isEmpty) return null;
+
+    // Sort by date suffix (YYYY-MM-DD)
+    routineKeys.sort();
+    
+    final recentKeys = routineKeys.length > days 
+        ? routineKeys.sublist(routineKeys.length - days)
+        : routineKeys;
+
+    int totalMinutes = 0;
+    int count = 0;
+
+    for (final key in recentKeys) {
+      final data = allMetrics[key]!;
+      try {
+        final start = DateTime.parse(data['startTime'] as String);
+        // Normalize to minutes since midnight of THAT day
+        // Note: startTime is actual DateTime, but we care about the time of day
+        totalMinutes += start.hour * 60 + start.minute;
+        count++;
+      } catch (_) {}
+    }
+
+    if (count == 0) return null;
+    final avgMinutes = totalMinutes ~/ count;
+
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, avgMinutes ~/ 60, avgMinutes % 60);
+  }
+
+  /// Calculates a consistency score (0-100) based on completion frequency over [days].
+  int getConsistencyScore(String routineType, {int days = 7}) {
+    final allMetrics = getAllRoutineMetrics();
+    
+    final today = DateTime.now();
+    int completions = 0;
+
+    for (int i = 1; i <= days; i++) {
+      final checkDate = today.subtract(Duration(days: i));
+      final dateStr = "${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}";
+      if (allMetrics.containsKey('metrics_${routineType}_$dateStr')) {
+        completions++;
+      }
+    }
+
+    return (completions / days * 100).toInt();
+  }
 }

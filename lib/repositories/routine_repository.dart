@@ -1,6 +1,7 @@
 import '../models/routine_task.dart';
 import '../services/time_service.dart';
 import '../services/storage_service.dart';
+import '../services/notification_service.dart';
 
 class RoutineRepository {
   static const _morningKey = 'morning_tasks';
@@ -11,6 +12,8 @@ class RoutineRepository {
   static const _morningLastStreakDateKey = 'morning_last_streak_date';
   static const _nightLastStreakDateKey = 'night_last_streak_date';
   static const _onboardingKey = 'onboarding_completed';
+  static const _morningStartTimeKey = 'morning_start_time';
+  static const _nightStartTimeKey = 'night_start_time';
 
   static final List<RoutineTask> defaultMorningTasks = [
     RoutineTask(title: 'Drink Water', emoji: '💦'),
@@ -28,6 +31,7 @@ class RoutineRepository {
 
   final BaseStorage _storage;
   final TimeService timeService;
+  final NotificationService? notificationService;
 
   /// In-memory cache for journal entries.
   /// Keys are dates in YYYY-MM-DD format.
@@ -36,7 +40,7 @@ class RoutineRepository {
   /// Flag indicating if [_journalCache] contains all entries from storage.
   bool _isCacheComplete = false;
 
-  RoutineRepository(this._storage, this.timeService);
+  RoutineRepository(this._storage, this.timeService, {this.notificationService});
 
   bool isOnboardingCompleted() => _storage.get<bool>(_onboardingKey, boxName: 'meta') ?? false;
 
@@ -72,12 +76,73 @@ class RoutineRepository {
 
   Future<void> saveCompletionState(
       String routineType, Map<String, bool> state) async {
+    // Load a fresh copy of previous state for accurate comparison
+    final previousState = loadCompletionState(routineType);
+    final wasAnythingCompleted = previousState.values.any((v) => v);
+    final isAnythingCompleted = state.values.any((v) => v);
+
     await _storage.set(_dayKey(routineType), state, boxName: 'activity');
+
+    final today = timeService.getEffectiveDateString();
+
+    // Owl Protocol: 2-Minute Rule & Streak Protection
+    if (!wasAnythingCompleted && isAnythingCompleted) {
+      // First task completed: cancel nudges AND increment streak (2-Minute Rule)
+      await notificationService?.cancelNudgeChain(routineType);
+      
+      if (getLastStreakDate(routineType) != today) {
+        await incrementStreak(routineType, today);
+      }
+    } else if (wasAnythingCompleted && !isAnythingCompleted) {
+      // Everything unchecked: re-arm nudges AND remove streak for today (Undo support)
+      await scheduleNudges(routineType);
+      await removeStreakForToday(routineType, today);
+    }
   }
 
   Map<String, bool> loadCompletionState(String routineType) {
     final map = _storage.get<Map>(_dayKey(routineType), boxName: 'activity');
-    return map?.cast<String, bool>() ?? {};
+    if (map == null) return {};
+    // Return a fresh copy to prevent in-place modifications affecting the cache
+    return Map<String, bool>.from(map.cast<String, bool>());
+  }
+
+  // ── Routine Settings ──────────────────────────────────────────────
+
+  String? getRoutineStartTime(String routineType) {
+    final key = routineType == 'morning' ? _morningStartTimeKey : _nightStartTimeKey;
+    return _storage.get<String>(key, boxName: 'routines');
+  }
+
+  Future<void> saveRoutineStartTime(String routineType, String timeIso) async {
+    final key = routineType == 'morning' ? _morningStartTimeKey : _nightStartTimeKey;
+    await _storage.set(key, timeIso, boxName: 'routines');
+    await scheduleNudges(routineType);
+  }
+
+  Future<void> scheduleNudges(String routineType) async {
+    final timeStr = getRoutineStartTime(routineType);
+    if (timeStr == null || notificationService == null) return;
+
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return;
+
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+
+    final now = DateTime.now();
+    var scheduleDate = DateTime(now.year, now.month, now.day, hour, minute);
+
+    // If time has passed today, schedule for tomorrow
+    if (scheduleDate.isBefore(now)) {
+      scheduleDate = scheduleDate.add(const Duration(days: 1));
+    }
+
+    await notificationService!.scheduleNudgeChain(
+      routineId: routineType,
+      startTime: scheduleDate,
+      title: routineType == 'morning' ? 'Morning Routine' : 'Night Routine',
+    );
   }
 
   // ── Streak Counter ──────────────────────────────────────────────────
@@ -116,6 +181,30 @@ class RoutineRepository {
         await _storage.set(countKey, current - 1, boxName: 'activity');
       }
       await _storage.set(dateKey, '', boxName: 'activity');
+    }
+  }
+
+  /// Checks if the streak was broken (missed more than 1 day) and resets if necessary.
+  Future<void> syncStreaks(String routineType) async {
+    final todayStr = timeService.getEffectiveDateString();
+    final lastDateStr = getLastStreakDate(routineType);
+
+    if (lastDateStr == null || lastDateStr.isEmpty) return;
+    if (lastDateStr == todayStr) return;
+
+    try {
+      final lastDate = DateTime.parse(lastDateStr);
+      final today = DateTime.parse(todayStr);
+      
+      // Calculate day difference (ignoring hours since they are already effective dates)
+      final diff = today.difference(lastDate).inDays;
+      
+      if (diff > 1) {
+        await resetStreak(routineType);
+      }
+    } catch (e) {
+      // If date format is invalid, reset just in case
+      await resetStreak(routineType);
     }
   }
 
