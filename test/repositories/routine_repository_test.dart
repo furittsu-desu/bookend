@@ -224,6 +224,24 @@ void main() {
         repository.loadJournalEntry('2026-04-29');
         verify(() => mockPrefs.getString('journal_2026-04-29')).called(2);
       });
+
+      test('getAllJournalEntries performs full scan and populates cache', () {
+        final journalKeys = ['journal_2026-04-28', 'journal_2026-04-29'];
+        when(() => mockPrefs.getKeys()).thenReturn(journalKeys.toSet());
+        when(() => mockPrefs.getString('journal_2026-04-28')).thenReturn('Raw Text');
+        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn('{"text":"JSON Text","timestamp":"..."}');
+
+        final result = repository.getAllJournalEntries();
+
+        expect(result.length, 2);
+        expect(result['2026-04-28']!['text'], 'Raw Text');
+        expect(result['2026-04-29']!['text'], 'JSON Text');
+        
+        // Subsequent call should return same cache without scanning
+        final result2 = repository.getAllJournalEntries();
+        expect(result2, same(result));
+        verify(() => mockPrefs.getKeys()).called(1);
+      });
     });
   });
 }
