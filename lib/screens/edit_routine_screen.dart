@@ -132,11 +132,19 @@ class _EditRoutineScreenState extends State<EditRoutineScreen> {
                         children: [
                           '☀️', '🪥', '📖', '🧘', '☕', '🚿', '📓', '💊', '🍳', '🏃', 
                           '💦', '🌙', '🛌', '📵', '🥛', '📝', '🧹', '🚶', '🎧', '🛀'
-                        ].map((e) => GestureDetector(
-                          onTap: () => emojiController.text = e,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            child: Text(e, style: const TextStyle(fontSize: 24)),
+                        ].map((e) => Semantics(
+                          button: true,
+                          label: 'Select emoji $e',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => emojiController.text = e,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                child: Text(e, style: const TextStyle(fontSize: 24)),
+                              ),
+                            ),
                           ),
                         )).toList(),
                       ),
