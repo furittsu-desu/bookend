@@ -108,14 +108,45 @@ void main() {
     });
 
     test('incrementStreak updates count and date', () async {
-      when(() => mockPrefs.getInt(any())).thenReturn(2);
+      when(() => mockPrefs.getInt(any())).thenReturn(5);
       when(() => mockPrefs.setInt(any(), any())).thenAnswer((_) async => true);
       when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
-
+      
       await repository.incrementStreak('morning', '2026-04-29');
-
-      verify(() => mockPrefs.setInt('morning_streak_count', 3)).called(1);
+      
+      verify(() => mockPrefs.setInt('morning_streak_count', 6)).called(1);
       verify(() => mockPrefs.setString('morning_last_streak_date', '2026-04-29')).called(1);
+    });
+
+    test('resetStreak sets count to zero', () async {
+      when(() => mockPrefs.setInt(any(), any())).thenAnswer((_) async => true);
+      
+      await repository.resetStreak('morning');
+      
+      verify(() => mockPrefs.setInt('morning_streak_count', 0)).called(1);
+    });
+
+    group('removeStreakForToday', () {
+      test('removes streak if date matches', () async {
+        when(() => mockPrefs.getString('morning_last_streak_date')).thenReturn('2026-04-30');
+        when(() => mockPrefs.getInt('morning_streak_count')).thenReturn(5);
+        when(() => mockPrefs.setInt(any(), any())).thenAnswer((_) async => true);
+        when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+
+        await repository.removeStreakForToday('morning', '2026-04-30');
+
+        verify(() => mockPrefs.setInt('morning_streak_count', 4)).called(1);
+        verify(() => mockPrefs.setString('morning_last_streak_date', '')).called(1);
+      });
+
+      test('does nothing if date does not match', () async {
+        when(() => mockPrefs.getString('morning_last_streak_date')).thenReturn('2026-04-29');
+        
+        await repository.removeStreakForToday('morning', '2026-04-30');
+
+        verifyNever(() => mockPrefs.setInt(any(), any()));
+        verifyNever(() => mockPrefs.remove(any()));
+      });
     });
 
     group('Journal', () {
