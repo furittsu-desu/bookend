@@ -10,7 +10,6 @@ class RoutineRepository {
   static const _nightStreakCountKey = 'night_streak_count';
   static const _morningLastStreakDateKey = 'morning_last_streak_date';
   static const _nightLastStreakDateKey = 'night_last_streak_date';
-  static const _journalPrefix = 'journal_';
   static const _onboardingKey = 'onboarding_completed';
 
   static final List<RoutineTask> defaultMorningTasks = [
@@ -28,7 +27,7 @@ class RoutineRepository {
   ];
 
   final BaseStorage _storage;
-  final TimeService _timeService;
+  final TimeService timeService;
 
   /// In-memory cache for journal entries.
   /// Keys are dates in YYYY-MM-DD format.
@@ -37,7 +36,7 @@ class RoutineRepository {
   /// Flag indicating if [_journalCache] contains all entries from storage.
   bool _isCacheComplete = false;
 
-  RoutineRepository(this._storage, this._timeService);
+  RoutineRepository(this._storage, this.timeService);
 
   bool isOnboardingCompleted() => _storage.get<bool>(_onboardingKey, boxName: 'meta') ?? false;
 
@@ -67,7 +66,7 @@ class RoutineRepository {
   // ── Daily completion state ────────────────────────────────────────
 
   String _dayKey(String routineType) {
-    final today = _timeService.getEffectiveDateString();
+    final today = timeService.getEffectiveDateString();
     return '$_completionPrefix${routineType}_$today';
   }
 

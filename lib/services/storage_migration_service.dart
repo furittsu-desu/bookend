@@ -41,8 +41,25 @@ class StorageMigrationService {
     // 4. Migrate Journal
     await _migrateJournal(prefs);
 
-    // 5. Mark as completed
+    // 5. Migrate Metrics
+    await _migrateMetrics(prefs);
+
+    // 6. Mark as completed
     await _hiveStorage.set(_migrationCompletedKey, true, boxName: 'meta');
+  }
+
+  Future<void> _migrateMetrics(SharedPreferences prefs) async {
+    for (final key in prefs.getKeys()) {
+      if (key.startsWith('metrics_')) {
+        final raw = prefs.getString(key);
+        if (raw != null) {
+          try {
+            final decoded = jsonDecode(raw) as Map<String, dynamic>;
+            await _hiveStorage.set(key, decoded, boxName: 'activity');
+          } catch (_) {}
+        }
+      }
+    }
   }
 
   Future<void> _migrateTasks(SharedPreferences prefs, String key, String boxName) async {

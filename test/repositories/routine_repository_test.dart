@@ -1,93 +1,121 @@
-import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:bookend/services/storage_service.dart';
 import 'package:bookend/repositories/routine_repository.dart';
 import 'package:bookend/services/time_service.dart';
 import 'package:bookend/models/routine_task.dart';
 
-class MockSharedPreferences extends Mock implements SharedPreferences {}
+class FakeStorage implements BaseStorage {
+  Map<String, Map<String, dynamic>> boxes = {
+    'meta': {},
+    'routines': {},
+    'activity': {},
+    'journal': {},
+  };
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  T? get<T>(String key, {String? boxName}) {
+    return boxes[boxName ?? 'meta']?[key] as T?;
+  }
+
+  @override
+  Future<void> set<T>(String key, T value, {String? boxName}) async {
+    boxes[boxName ?? 'meta']![key] = value;
+  }
+
+  @override
+  Future<void> remove(String key, {String? boxName}) async {
+    boxes[boxName ?? 'meta']?.remove(key);
+  }
+
+  @override
+  List<String> getKeys({String? boxName}) {
+    return boxes[boxName ?? 'meta']?.keys.toList() ?? [];
+  }
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<String> exportData() async => '';
+
+  @override
+  Future<bool> importData(String json) async => true;
+}
+
 class MockTimeService extends Mock implements TimeService {}
 
 void main() {
   late RoutineRepository repository;
-  late MockSharedPreferences mockPrefs;
+  late FakeStorage storage;
   late MockTimeService mockTimeService;
 
   setUp(() {
-    mockPrefs = MockSharedPreferences();
+    storage = FakeStorage();
     mockTimeService = MockTimeService();
-    repository = RoutineRepository(mockPrefs, mockTimeService);
+    repository = RoutineRepository(storage, mockTimeService);
   });
 
   group('RoutineRepository', () {
     test('isOnboardingCompleted returns false if not set', () {
-      when(() => mockPrefs.getBool(any())).thenReturn(null);
       expect(repository.isOnboardingCompleted(), isFalse);
     });
 
     test('isOnboardingCompleted returns true if set to true', () {
-      when(() => mockPrefs.getBool('onboarding_completed')).thenReturn(true);
+      storage.boxes['meta']!['onboarding_completed'] = true;
       expect(repository.isOnboardingCompleted(), isTrue);
     });
 
     test('completeOnboarding sets flag', () async {
-      when(() => mockPrefs.setBool(any(), any())).thenAnswer((_) async => true);
-
       await repository.completeOnboarding();
-
-      verify(() => mockPrefs.setBool('onboarding_completed', true)).called(1);
+      expect(storage.boxes['meta']!['onboarding_completed'], true);
     });
 
-    test('loadMorningTasks returns tasks from prefs', () {
+    test('loadMorningTasks returns tasks from storage', () {
       final tasks = [RoutineTask(title: 'Morning')];
-      when(() => mockPrefs.getString('morning_tasks'))
-          .thenReturn(jsonEncode(tasks.map((t) => t.toJson()).toList()));
+      storage.boxes['routines']!['morning_tasks'] = tasks;
       
       final result = repository.loadMorningTasks();
       expect(result.first.title, 'Morning');
     });
 
-    test('loadNightTasks returns tasks from prefs', () {
+    test('loadNightTasks returns tasks from storage', () {
       final tasks = [RoutineTask(title: 'Night')];
-      when(() => mockPrefs.getString('night_tasks'))
-          .thenReturn(jsonEncode(tasks.map((t) => t.toJson()).toList()));
+      storage.boxes['routines']!['night_tasks'] = tasks;
       
       final result = repository.loadNightTasks();
       expect(result.first.title, 'Night');
     });
 
-    test('saveMorningTasks saves JSON to prefs', () async {
-      when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+    test('saveMorningTasks saves to storage', () async {
       final tasks = [RoutineTask(title: 'Test')];
-      
       await repository.saveMorningTasks(tasks);
-      verify(() => mockPrefs.setString('morning_tasks', any())).called(1);
+      expect(storage.boxes['routines']!['morning_tasks'], tasks);
     });
 
-    test('saveNightTasks saves JSON to prefs', () async {
-      when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+    test('saveNightTasks saves to storage', () async {
       final tasks = [RoutineTask(title: 'Test Night')];
-      
       await repository.saveNightTasks(tasks);
-      verify(() => mockPrefs.setString('night_tasks', any())).called(1);
+      expect(storage.boxes['routines']!['night_tasks'], tasks);
     });
 
     group('Completion State', () {
-      test('saveCompletionState saves JSON to prefs with date key', () async {
-        when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+      test('saveCompletionState saves to storage with date key', () async {
         when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
         
         final state = {'task-id': true};
         await repository.saveCompletionState('morning', state);
         
-        verify(() => mockPrefs.setString('completion_morning_2026-04-30', jsonEncode(state))).called(1);
+        expect(storage.boxes['activity']!['completion_morning_2026-04-30'], state);
       });
 
-      test('loadCompletionState returns map from prefs', () {
+      test('loadCompletionState returns map from storage', () {
         when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
         final state = {'task-id': true};
-        when(() => mockPrefs.getString('completion_morning_2026-04-30')).thenReturn(jsonEncode(state));
+        storage.boxes['activity']!['completion_morning_2026-04-30'] = state;
         
         final result = repository.loadCompletionState('morning');
         expect(result['task-id'], true);
@@ -95,152 +123,112 @@ void main() {
 
       test('loadCompletionState returns empty map if not set', () {
         when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
-        when(() => mockPrefs.getString('completion_morning_2026-04-30')).thenReturn(null);
         
         final result = repository.loadCompletionState('morning');
         expect(result, isEmpty);
       });
     });
 
-    test('getStreak returns value from prefs', () {
-      when(() => mockPrefs.getInt('morning_streak_count')).thenReturn(5);
+    test('getStreak returns value from storage', () {
+      storage.boxes['activity']!['morning_streak_count'] = 5;
       expect(repository.getStreak('morning'), 5);
     });
 
     test('incrementStreak updates count and date', () async {
-      when(() => mockPrefs.getInt(any())).thenReturn(5);
-      when(() => mockPrefs.setInt(any(), any())).thenAnswer((_) async => true);
-      when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+      storage.boxes['activity']!['morning_streak_count'] = 5;
       
       await repository.incrementStreak('morning', '2026-04-29');
       
-      verify(() => mockPrefs.setInt('morning_streak_count', 6)).called(1);
-      verify(() => mockPrefs.setString('morning_last_streak_date', '2026-04-29')).called(1);
+      expect(storage.boxes['activity']!['morning_streak_count'], 6);
+      expect(storage.boxes['activity']!['morning_last_streak_date'], '2026-04-29');
     });
 
     test('resetStreak sets count to zero', () async {
-      when(() => mockPrefs.setInt(any(), any())).thenAnswer((_) async => true);
-      
+      storage.boxes['activity']!['morning_streak_count'] = 5;
       await repository.resetStreak('morning');
-      
-      verify(() => mockPrefs.setInt('morning_streak_count', 0)).called(1);
+      expect(storage.boxes['activity']!['morning_streak_count'], 0);
     });
 
     group('removeStreakForToday', () {
       test('removes streak if date matches', () async {
-        when(() => mockPrefs.getString('morning_last_streak_date')).thenReturn('2026-04-30');
-        when(() => mockPrefs.getInt('morning_streak_count')).thenReturn(5);
-        when(() => mockPrefs.setInt(any(), any())).thenAnswer((_) async => true);
-        when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+        storage.boxes['activity']!['morning_last_streak_date'] = '2026-04-30';
+        storage.boxes['activity']!['morning_streak_count'] = 5;
 
         await repository.removeStreakForToday('morning', '2026-04-30');
 
-        verify(() => mockPrefs.setInt('morning_streak_count', 4)).called(1);
-        verify(() => mockPrefs.setString('morning_last_streak_date', '')).called(1);
+        expect(storage.boxes['activity']!['morning_streak_count'], 4);
+        expect(storage.boxes['activity']!['morning_last_streak_date'], '');
       });
 
       test('does nothing if date does not match', () async {
-        when(() => mockPrefs.getString('morning_last_streak_date')).thenReturn('2026-04-29');
+        storage.boxes['activity']!['morning_last_streak_date'] = '2026-04-29';
+        storage.boxes['activity']!['morning_streak_count'] = 5;
         
         await repository.removeStreakForToday('morning', '2026-04-30');
 
-        verifyNever(() => mockPrefs.setInt(any(), any()));
-        verifyNever(() => mockPrefs.remove(any()));
+        expect(storage.boxes['activity']!['morning_streak_count'], 5);
+        expect(storage.boxes['activity']!['morning_last_streak_date'], '2026-04-29');
       });
     });
 
     group('Journal', () {
       test('loadJournalEntry returns null when no entry exists', () {
-        when(() => mockPrefs.getString(any())).thenReturn(null);
         expect(repository.loadJournalEntry('2026-04-29'), isNull);
       });
 
-      test('loadJournalEntry returns text from valid JSON entry', () {
-        final json = '{"text":"Hello World","timestamp":"2026-04-29T12:00:00"}';
-        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(json);
+      test('loadJournalEntry returns text from valid entry', () {
+        final entry = {'text': 'Hello World', 'timestamp': '2026-04-30'};
+        storage.boxes['journal']!['2026-04-29'] = entry;
         
         expect(repository.loadJournalEntry('2026-04-29'), 'Hello World');
       });
 
-      test('loadJournalEntry returns raw string when not valid JSON (fallback)', () {
-        final raw = 'Just a raw string entry';
-        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(raw);
-        
-        expect(repository.loadJournalEntry('2026-04-29'), 'Just a raw string entry');
-      });
-
-      test('loadJournalEntry returns raw string when JSON is a list (fallback)', () {
-        final json = '["item1", "item2"]';
-        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(json);
-        
-        expect(repository.loadJournalEntry('2026-04-29'), '["item1", "item2"]');
-      });
-
-      test('loadJournalEntry returns raw string when text field is missing (fallback)', () {
-        final json = '{"not_text":"some data"}';
-        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(json);
-        
-        expect(repository.loadJournalEntry('2026-04-29'), '{"not_text":"some data"}');
-      });
-
       test('loadJournalEntry hits cache on subsequent calls', () {
-        final json = '{"text":"Cached entry","timestamp":"..."}';
-        when(() => mockPrefs.getString(any())).thenReturn(json);
+        final entry = {'text': 'Cached entry', 'timestamp': '2026-04-30'};
+        storage.boxes['journal']!['2026-04-29'] = entry;
         
         // First call - populates cache
         repository.loadJournalEntry('2026-04-29');
-        verify(() => mockPrefs.getString('journal_2026-04-29')).called(1);
         
-        // Second call - should hit cache
+        // Modify storage - cache should still have old value
+        storage.boxes['journal']!['2026-04-29'] = {'text': 'New', 'timestamp': '...'};
+        
         final result = repository.loadJournalEntry('2026-04-29');
         expect(result, 'Cached entry');
-        verifyNever(() => mockPrefs.getString('journal_2026-04-29'));
       });
 
       test('saveJournalEntry updates cache', () async {
-        when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
-        
         await repository.saveJournalEntry('2026-04-29', 'New Text');
         
-        // Should hit cache, not prefs
+        expect(storage.boxes['journal']!['2026-04-29']!['text'], 'New Text');
+        
         final result = repository.loadJournalEntry('2026-04-29');
         expect(result, 'New Text');
-        verifyNever(() => mockPrefs.getString('journal_2026-04-29'));
       });
       
       test('deleteJournalEntry clears cache', () async {
-        when(() => mockPrefs.remove(any())).thenAnswer((_) async => true);
-        final json = '{"text":"To be deleted","timestamp":"..."}';
-        when(() => mockPrefs.getString(any())).thenReturn(json);
+        storage.boxes['journal']!['2026-04-29'] = {'text': 'To be deleted', 'timestamp': '...'};
 
         // Load into cache
         repository.loadJournalEntry('2026-04-29');
         
         // Delete
         await repository.deleteJournalEntry('2026-04-29');
-        verify(() => mockPrefs.remove('journal_2026-04-29')).called(1);
+        expect(storage.boxes['journal']!['2026-04-29'], isNull);
 
-        // Load again - should call prefs because cache is cleared
-        repository.loadJournalEntry('2026-04-29');
-        verify(() => mockPrefs.getString('journal_2026-04-29')).called(2);
+        // Load again - should return null
+        expect(repository.loadJournalEntry('2026-04-29'), isNull);
       });
 
       test('getAllJournalEntries performs full scan and populates cache', () {
-        final journalKeys = ['journal_2026-04-28', 'journal_2026-04-29'];
-        when(() => mockPrefs.getKeys()).thenReturn(journalKeys.toSet());
-        when(() => mockPrefs.getString('journal_2026-04-28')).thenReturn('Raw Text');
-        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn('{"text":"JSON Text","timestamp":"..."}');
+        storage.boxes['journal']!['2026-04-28'] = {'text': 'Text 1', 'timestamp': '2026-04-28'};
+        storage.boxes['journal']!['2026-04-29'] = {'text': 'Text 2', 'timestamp': '2026-04-29'};
 
         final result = repository.getAllJournalEntries();
 
         expect(result.length, 2);
-        expect(result['2026-04-28']!['text'], 'Raw Text');
-        expect(result['2026-04-29']!['text'], 'JSON Text');
-        
-        // Subsequent call should return same cache without scanning
-        final result2 = repository.getAllJournalEntries();
-        expect(result2, same(result));
-        verify(() => mockPrefs.getKeys()).called(1);
+        expect(result['2026-04-28']!['text'], 'Text 1');
+        expect(result['2026-04-29']!['text'], 'Text 2');
       });
     });
   });

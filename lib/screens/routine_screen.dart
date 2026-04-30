@@ -14,7 +14,7 @@ import 'settings_screen.dart';
 
 class RoutineScreen extends StatefulWidget {
   final String routineType; // 'morning' or 'night'
-  final StorageService storage;
+  final BaseStorage storage;
   final RoutineRepository routineRepository;
   final MetricsRepository metricsRepository;
   final Color accentColor;
@@ -80,7 +80,7 @@ class RoutineScreenState extends State<RoutineScreen> {
       task.isCompleted = value;
       
       // Handle Metrics & Undo for task durations
-      final today = widget.storage.timeService.getEffectiveDateString();
+      final today = widget.routineRepository.timeService.getEffectiveDateString();
       if (!value) {
         // Unchecked: remove from metrics so it's not double counted if completed again later
         widget.metricsRepository.removeTaskFromMetrics(widget.routineType, today, task.id);
@@ -109,7 +109,7 @@ class RoutineScreenState extends State<RoutineScreen> {
       if (_allCompleted && !wasAllCompleted) {
         _triggerCelebration();
       } else if (wasAllCompleted && !_allCompleted) {
-        final today = widget.storage.timeService.getEffectiveDateString();
+        final today = widget.routineRepository.timeService.getEffectiveDateString();
         widget.routineRepository.removeStreakForToday(widget.routineType, today).then((_) {
           if (mounted) setState(() {});
         });
@@ -127,7 +127,7 @@ class RoutineScreenState extends State<RoutineScreen> {
     _showCelebration = true;
 
     // Streak logic
-    final today = widget.storage.timeService.getEffectiveDateString();
+    final today = widget.routineRepository.timeService.getEffectiveDateString();
     
     if (widget.routineRepository.getLastStreakDate(widget.routineType) != today) {
       widget.routineRepository.incrementStreak(widget.routineType, today).then((_) {
@@ -206,7 +206,7 @@ class RoutineScreenState extends State<RoutineScreen> {
           routineType: widget.routineType,
           routineRepository: widget.routineRepository,
           metricsRepository: widget.metricsRepository,
-          timeService: widget.storage.timeService,
+          timeService: widget.routineRepository.timeService,
           accentColor: widget.accentColor,
           uncompletedTasks: uncompleted,
         ),

@@ -6,7 +6,7 @@ import '../repositories/metrics_repository.dart';
 import 'home_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  final StorageService storage;
+  final BaseStorage storage;
   final RoutineRepository routineRepository;
   final MetricsRepository metricsRepository;
 

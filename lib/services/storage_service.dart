@@ -15,4 +15,10 @@ abstract class BaseStorage {
   
   /// Closes the storage.
   Future<void> close();
+
+  /// Exports all data as a JSON string.
+  Future<String> exportData();
+
+  /// Imports data from a JSON string. Returns true if successful.
+  Future<bool> importData(String json);
 }

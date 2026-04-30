@@ -16,7 +16,7 @@ class _DesktopDragScrollBehavior extends MaterialScrollBehavior {
 }
 
 class HomeScreen extends StatefulWidget {
-  final StorageService storage;
+  final BaseStorage storage;
   final RoutineRepository routineRepository;
   final MetricsRepository metricsRepository;
 

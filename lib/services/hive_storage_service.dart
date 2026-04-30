@@ -86,4 +86,63 @@ class HiveStorageService implements BaseStorage {
   Future<void> close() async {
     await Hive.close();
   }
+
+  @override
+  Future<String> exportData() async {
+    final data = {
+      'meta': {for (var k in _metaBox.keys) k.toString(): _metaBox.get(k)},
+      'routines': {
+        for (var k in _routinesBox.keys)
+          k.toString(): _routinesBox.get(k) is List
+              ? (_routinesBox.get(k) as List)
+                  .map((e) => e is RoutineTask ? e.toJson() : e)
+                  .toList()
+              : _routinesBox.get(k)
+      },
+      'activity': {for (var k in _activityBox.keys) k.toString(): _activityBox.get(k)},
+      'journal': {for (var k in _journalBox.keys) k.toString(): _journalBox.get(k)},
+    };
+    return jsonEncode(data);
+  }
+
+  @override
+  Future<bool> importData(String json) async {
+    try {
+      final data = jsonDecode(json) as Map<String, dynamic>;
+
+      if (data.containsKey('meta')) {
+        await _metaBox.clear();
+        await _metaBox.putAll(data['meta'] as Map);
+      }
+
+      if (data.containsKey('routines')) {
+        await _routinesBox.clear();
+        final routines = data['routines'] as Map<String, dynamic>;
+        for (var entry in routines.entries) {
+          if (entry.value is List) {
+            final list = (entry.value as List)
+                .map((e) => RoutineTask.fromJson(e as Map<String, dynamic>))
+                .toList();
+            await _routinesBox.put(entry.key, list);
+          } else {
+            await _routinesBox.put(entry.key, entry.value);
+          }
+        }
+      }
+
+      if (data.containsKey('activity')) {
+        await _activityBox.clear();
+        await _activityBox.putAll(data['activity'] as Map);
+      }
+
+      if (data.containsKey('journal')) {
+        await _journalBox.clear();
+        await _journalBox.putAll(data['journal'] as Map);
+      }
+
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 }
