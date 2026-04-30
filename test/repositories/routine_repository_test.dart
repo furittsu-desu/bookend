@@ -84,6 +84,27 @@ void main() {
         
         expect(repository.loadJournalEntry('2026-04-29'), 'Hello World');
       });
+
+      test('loadJournalEntry returns raw string when not valid JSON (fallback)', () {
+        final raw = 'Just a raw string entry';
+        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(raw);
+        
+        expect(repository.loadJournalEntry('2026-04-29'), 'Just a raw string entry');
+      });
+
+      test('loadJournalEntry returns raw string when JSON is a list (fallback)', () {
+        final json = '["item1", "item2"]';
+        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(json);
+        
+        expect(repository.loadJournalEntry('2026-04-29'), '["item1", "item2"]');
+      });
+
+      test('loadJournalEntry returns raw string when text field is missing (fallback)', () {
+        final json = '{"not_text":"some data"}';
+        when(() => mockPrefs.getString('journal_2026-04-29')).thenReturn(json);
+        
+        expect(repository.loadJournalEntry('2026-04-29'), '{"not_text":"some data"}');
+      });
     });
   });
 }
