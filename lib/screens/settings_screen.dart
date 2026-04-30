@@ -12,12 +12,14 @@ class SettingsScreen extends StatelessWidget {
     required this.accentColor,
   });
 
-  void _exportData(BuildContext context) {
-    final data = storage.exportData();
+  void _exportData(BuildContext context) async {
+    final data = await storage.exportData();
     Clipboard.setData(ClipboardData(text: data));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Backup copied to clipboard! Save it somewhere safe.')),
-    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Backup copied to clipboard! Save it somewhere safe.')),
+      );
+    }
   }
 
   void _importData(BuildContext context) async {

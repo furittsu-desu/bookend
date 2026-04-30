@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/storage_service.dart';
+import 'repositories/routine_repository.dart';
+import 'repositories/metrics_repository.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 
@@ -11,13 +13,27 @@ void main() async {
   final storage = StorageService();
   await storage.init();
 
-  runApp(BookendApp(storage: storage));
+  final routineRepository = RoutineRepository(storage.prefs, storage.timeService);
+  final metricsRepository = MetricsRepository(storage.prefs);
+
+  runApp(BookendApp(
+    storage: storage,
+    routineRepository: routineRepository,
+    metricsRepository: metricsRepository,
+  ));
 }
 
 class BookendApp extends StatelessWidget {
   final StorageService storage;
+  final RoutineRepository routineRepository;
+  final MetricsRepository metricsRepository;
 
-  const BookendApp({super.key, required this.storage});
+  const BookendApp({
+    super.key,
+    required this.storage,
+    required this.routineRepository,
+    required this.metricsRepository,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -46,9 +62,17 @@ class BookendApp extends StatelessWidget {
           ThemeData(brightness: Brightness.dark).textTheme,
         ),
       ),
-      home: storage.isFirstLaunch()
-          ? OnboardingScreen(storage: storage)
-          : HomeScreen(storage: storage),
+      home: !routineRepository.isOnboardingCompleted()
+          ? OnboardingScreen(
+              storage: storage,
+              routineRepository: routineRepository,
+              metricsRepository: metricsRepository,
+            )
+          : HomeScreen(
+              storage: storage,
+              routineRepository: routineRepository,
+              metricsRepository: metricsRepository,
+            ),
     );
   }
 }
