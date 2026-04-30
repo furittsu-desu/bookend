@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,21 +40,66 @@ void main() {
     });
 
     test('loadMorningTasks returns tasks from prefs', () {
-      final json = '[{"id":"1","title":"Task","emoji":"🔥","isCompleted":false}]';
-      when(() => mockPrefs.getString('morning_tasks')).thenReturn(json);
+      final tasks = [RoutineTask(title: 'Morning')];
+      when(() => mockPrefs.getString('morning_tasks'))
+          .thenReturn(jsonEncode(tasks.map((t) => t.toJson()).toList()));
       
-      final tasks = repository.loadMorningTasks();
+      final result = repository.loadMorningTasks();
+      expect(result.first.title, 'Morning');
+    });
+
+    test('loadNightTasks returns tasks from prefs', () {
+      final tasks = [RoutineTask(title: 'Night')];
+      when(() => mockPrefs.getString('night_tasks'))
+          .thenReturn(jsonEncode(tasks.map((t) => t.toJson()).toList()));
       
-      expect(tasks.length, 1);
-      expect(tasks[0].title, 'Task');
+      final result = repository.loadNightTasks();
+      expect(result.first.title, 'Night');
     });
 
     test('saveMorningTasks saves JSON to prefs', () async {
       when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+      final tasks = [RoutineTask(title: 'Test')];
       
-      await repository.saveMorningTasks([RoutineTask(title: 'New', emoji: '🆕')]);
-      
+      await repository.saveMorningTasks(tasks);
       verify(() => mockPrefs.setString('morning_tasks', any())).called(1);
+    });
+
+    test('saveNightTasks saves JSON to prefs', () async {
+      when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+      final tasks = [RoutineTask(title: 'Test Night')];
+      
+      await repository.saveNightTasks(tasks);
+      verify(() => mockPrefs.setString('night_tasks', any())).called(1);
+    });
+
+    group('Completion State', () {
+      test('saveCompletionState saves JSON to prefs with date key', () async {
+        when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+        
+        final state = {'task-id': true};
+        await repository.saveCompletionState('morning', state);
+        
+        verify(() => mockPrefs.setString('completion_morning_2026-04-30', jsonEncode(state))).called(1);
+      });
+
+      test('loadCompletionState returns map from prefs', () {
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+        final state = {'task-id': true};
+        when(() => mockPrefs.getString('completion_morning_2026-04-30')).thenReturn(jsonEncode(state));
+        
+        final result = repository.loadCompletionState('morning');
+        expect(result['task-id'], true);
+      });
+
+      test('loadCompletionState returns empty map if not set', () {
+        when(() => mockTimeService.getEffectiveDateString()).thenReturn('2026-04-30');
+        when(() => mockPrefs.getString('completion_morning_2026-04-30')).thenReturn(null);
+        
+        final result = repository.loadCompletionState('morning');
+        expect(result, isEmpty);
+      });
     });
 
     test('getStreak returns value from prefs', () {
