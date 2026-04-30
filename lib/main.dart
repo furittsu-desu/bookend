@@ -10,6 +10,8 @@ import 'repositories/metrics_repository.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 
+import 'services/notification_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -21,7 +23,15 @@ void main() async {
   await migrationService.migrateIfNeeded();
 
   final timeService = TimeService();
-  final routineRepository = RoutineRepository(storage, timeService);
+  final notificationService = NotificationService();
+  await notificationService.initialize();
+  await notificationService.requestPermissions();
+
+  final routineRepository = RoutineRepository(
+    storage,
+    timeService,
+    notificationService: notificationService,
+  );
   final metricsRepository = MetricsRepository(storage);
 
   runApp(BookendApp(
