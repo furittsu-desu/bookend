@@ -31,7 +31,11 @@ class RoutineRepository {
   final SharedPreferences _prefs;
   final TimeService _timeService;
 
+  /// In-memory cache for journal entries.
+  /// Keys are dates in YYYY-MM-DD format.
   final Map<String, Map<String, String>> _journalCache = {};
+
+  /// Flag indicating if [_journalCache] contains all entries from storage.
   bool _isCacheComplete = false;
 
   RoutineRepository(this._prefs, this._timeService);
@@ -127,6 +131,10 @@ class RoutineRepository {
 
   // ── Journal ─────────────────────────────────────────────────────────
 
+  /// Saves a journal entry for the given [date].
+  ///
+  /// The entry is stored as a JSON map containing the [text] and a current timestamp.
+  /// The in-memory cache is updated immediately.
   Future<void> saveJournalEntry(String date, String text) async {
     final timestamp = DateTime.now().toIso8601String();
     final data = {
@@ -141,6 +149,11 @@ class RoutineRepository {
     };
   }
 
+  /// Loads a journal entry for the given [date].
+  ///
+  /// Checks the in-memory cache first. On a cache miss, it reads from persistent storage.
+  /// If the stored data is valid JSON, it returns the 'text' field and populates the cache.
+  /// If the data is malformed or in an old format, it returns the raw string as a fallback.
   String? loadJournalEntry(String date) {
     if (_journalCache.containsKey(date)) {
       return _journalCache[date]!['text'];
@@ -165,11 +178,15 @@ class RoutineRepository {
     }
   }
 
+  /// Deletes the journal entry for the given [date] from both storage and cache.
   Future<void> deleteJournalEntry(String date) async {
     await _prefs.remove('$_journalPrefix$date');
     _journalCache.remove(date);
   }
 
+  /// Retrieves all journal entries, performing a full scan of storage if the cache is not complete.
+  ///
+  /// Subsequent calls will return the authoritative in-memory cache.
   Map<String, Map<String, String>> getAllJournalEntries() {
     if (_isCacheComplete) return _journalCache;
 
