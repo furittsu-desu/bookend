@@ -105,6 +105,48 @@ void main() {
         
         expect(repository.loadJournalEntry('2026-04-29'), '{"not_text":"some data"}');
       });
+
+      test('loadJournalEntry hits cache on subsequent calls', () {
+        final json = '{"text":"Cached entry","timestamp":"..."}';
+        when(() => mockPrefs.getString(any())).thenReturn(json);
+        
+        // First call - populates cache
+        repository.loadJournalEntry('2026-04-29');
+        verify(() => mockPrefs.getString('journal_2026-04-29')).called(1);
+        
+        // Second call - should hit cache
+        final result = repository.loadJournalEntry('2026-04-29');
+        expect(result, 'Cached entry');
+        verifyNever(() => mockPrefs.getString('journal_2026-04-29'));
+      });
+
+      test('saveJournalEntry updates cache', () async {
+        when(() => mockPrefs.setString(any(), any())).thenAnswer((_) async => true);
+        
+        await repository.saveJournalEntry('2026-04-29', 'New Text');
+        
+        // Should hit cache, not prefs
+        final result = repository.loadJournalEntry('2026-04-29');
+        expect(result, 'New Text');
+        verifyNever(() => mockPrefs.getString('journal_2026-04-29'));
+      });
+      
+      test('deleteJournalEntry clears cache', () async {
+        when(() => mockPrefs.remove(any())).thenAnswer((_) async => true);
+        final json = '{"text":"To be deleted","timestamp":"..."}';
+        when(() => mockPrefs.getString(any())).thenReturn(json);
+
+        // Load into cache
+        repository.loadJournalEntry('2026-04-29');
+        
+        // Delete
+        await repository.deleteJournalEntry('2026-04-29');
+        verify(() => mockPrefs.remove('journal_2026-04-29')).called(1);
+
+        // Load again - should call prefs because cache is cleared
+        repository.loadJournalEntry('2026-04-29');
+        verify(() => mockPrefs.getString('journal_2026-04-29')).called(2);
+      });
     });
   });
 }

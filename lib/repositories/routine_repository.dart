@@ -31,7 +31,8 @@ class RoutineRepository {
   final SharedPreferences _prefs;
   final TimeService _timeService;
 
-  Map<String, Map<String, String>>? _journalCache;
+  final Map<String, Map<String, String>> _journalCache = {};
+  bool _isCacheComplete = false;
 
   RoutineRepository(this._prefs, this._timeService);
 
@@ -134,59 +135,67 @@ class RoutineRepository {
     };
     await _prefs.setString('$_journalPrefix$date', jsonEncode(data));
 
-    if (_journalCache != null) {
-      _journalCache![date] = {
-        'text': text,
-        'timestamp': timestamp,
-      };
-    }
+    _journalCache[date] = {
+      'text': text,
+      'timestamp': timestamp,
+    };
   }
 
   String? loadJournalEntry(String date) {
-    if (_journalCache != null && _journalCache!.containsKey(date)) {
-      return _journalCache![date]!['text'];
+    if (_journalCache.containsKey(date)) {
+      return _journalCache[date]!['text'];
     }
 
     final raw = _prefs.getString('$_journalPrefix$date');
     if (raw == null) return null;
     try {
       final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      return decoded['text'] as String;
+      final text = decoded['text'] as String;
+      _journalCache[date] = {
+        'text': text,
+        'timestamp': decoded['timestamp'] as String? ?? '',
+      };
+      return text;
     } catch (_) {
+      _journalCache[date] = {
+        'text': raw,
+        'timestamp': '',
+      };
       return raw;
     }
   }
 
   Future<void> deleteJournalEntry(String date) async {
     await _prefs.remove('$_journalPrefix$date');
-    _journalCache?.remove(date);
+    _journalCache.remove(date);
   }
 
   Map<String, Map<String, String>> getAllJournalEntries() {
-    if (_journalCache != null) return _journalCache!;
+    if (_isCacheComplete) return _journalCache;
 
-    final entries = <String, Map<String, String>>{};
     for (final key in _prefs.getKeys()) {
       if (key.startsWith(_journalPrefix)) {
         final date = key.substring(_journalPrefix.length);
-        final raw = _prefs.getString(key);
-        if (raw != null && raw.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(raw) as Map<String, dynamic>;
-            entries[date] = {
-              'text': decoded['text'] as String? ?? '',
-              'timestamp': decoded['timestamp'] as String? ?? '',
-            };
-          } catch (_) {
-            entries[date] = {
-              'text': raw,
-              'timestamp': '',
-            };
+        if (!_journalCache.containsKey(date)) {
+          final raw = _prefs.getString(key);
+          if (raw != null && raw.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(raw) as Map<String, dynamic>;
+              _journalCache[date] = {
+                'text': decoded['text'] as String? ?? '',
+                'timestamp': decoded['timestamp'] as String? ?? '',
+              };
+            } catch (_) {
+              _journalCache[date] = {
+                'text': raw,
+                'timestamp': '',
+              };
+            }
           }
         }
       }
     }
-    _journalCache = entries;
-    return entries;
+    _isCacheComplete = true;
+    return _journalCache;
   }
 }
