@@ -1,0 +1,3 @@
+## 2024-05-18 - Semantics on Custom Toggle Widgets
+**Learning:** Custom interactive elements (like `InkWell` toggling a checkbox-like UI) in Flutter don't automatically provide screen readers with a unified context. A screen reader might read out the inner text but miss that the whole area acts as a checkbox.
+**Action:** Always wrap custom toggles/checkboxes in a `Semantics` widget with `checked: isCompleted` and `button: true`, and use `ExcludeSemantics` on its children to prevent duplicate or messy readouts.
