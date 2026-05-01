@@ -1,0 +1,3 @@
+## 2024-05-18 - [Flutter AnimatedBuilder Optimization]
+**Learning:** Calling `setState` inside a `ScrollController` or `PageController` listener causes the entire widget tree beneath it (including complex `RoutineScreen` instances) to rebuild on every frame of the scroll animation. This is a significant performance anti-pattern in Flutter.
+**Action:** When animating UI elements based on scroll position (like background color interpolation or page indicators), wrap only the animated elements in an `AnimatedBuilder` and pass the scrollable widget (e.g., `PageView`) as the static `child`. This confines rebuilds to just the animated nodes and preserves the static tree.
