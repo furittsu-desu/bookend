@@ -90,77 +90,85 @@ class _AnimatedTaskTileState extends State<AnimatedTaskTile>
               ),
           ],
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => widget.onToggle(!isCompleted),
-          child: Row(
-            children: [
-              // Checkbox
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isCompleted
-                      ? widget.accentColor
-                      : Colors.transparent,
-                  border: Border.all(
-                    color: isCompleted
-                        ? widget.accentColor
-                        : Theme.of(context)
-                            .colorScheme
-                            .outline
-                            .withAlpha(100),
-                    width: 2,
-                  ),
-                ),
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 250),
-                  opacity: isCompleted ? 1.0 : 0.0,
-                  child: const Icon(
-                    Icons.check_rounded,
-                    size: 18,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              // Emoji
-              if (widget.task.emoji.isNotEmpty) ...[
-                Text(
-                  widget.task.emoji,
-                  style: const TextStyle(fontSize: 22),
-                ),
-                const SizedBox(width: 12),
-              ],
-              // Title
-              Expanded(
-                child: AnimatedBuilder(
-                  animation: _strikeAnim,
-                  builder: (context, child) {
-                    return Text(
-                      widget.task.title,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
+        child: Semantics(
+          label: widget.task.emoji.isNotEmpty
+              ? '${widget.task.emoji} ${widget.task.title}'
+              : widget.task.title,
+          checked: isCompleted,
+          button: true,
+          onTapHint: 'Toggle task completion',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => widget.onToggle(!isCompleted),
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
+                  // Checkbox
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isCompleted
+                          ? widget.accentColor
+                          : Colors.transparent,
+                      border: Border.all(
                         color: isCompleted
-                            ? Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withAlpha(120)
-                            : Theme.of(context).colorScheme.onSurface,
-                        decoration: isCompleted
-                            ? TextDecoration.lineThrough
-                            : TextDecoration.none,
-                        decorationColor: widget.accentColor.withAlpha(150),
-                        decorationThickness: 2,
+                            ? widget.accentColor
+                            : Theme.of(
+                                context,
+                              ).colorScheme.outline.withAlpha(100),
+                        width: 2,
                       ),
-                    );
-                  },
-                ),
+                    ),
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 250),
+                      opacity: isCompleted ? 1.0 : 0.0,
+                      child: const Icon(
+                        Icons.check_rounded,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  // Emoji
+                  if (widget.task.emoji.isNotEmpty) ...[
+                    Text(
+                      widget.task.emoji,
+                      style: const TextStyle(fontSize: 22),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  // Title
+                  Expanded(
+                    child: AnimatedBuilder(
+                      animation: _strikeAnim,
+                      builder: (context, child) {
+                        return Text(
+                          widget.task.title,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: isCompleted
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onSurface.withAlpha(120)
+                                : Theme.of(context).colorScheme.onSurface,
+                            decoration: isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                            decorationColor: widget.accentColor.withAlpha(150),
+                            decorationThickness: 2,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
