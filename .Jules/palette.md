@@ -1,0 +1,3 @@
+## 2024-05-02 - Add Semantics to AnimatedTaskTile Custom Toggle
+**Learning:** In Flutter, custom interactive toggle widgets (e.g., InkWell inside AnimatedTaskTile) must be explicitly wrapped in a Semantics widget with `checked` and `button` properties enabled for proper screen reader behavior. The visual children (like Row) should also be wrapped in `ExcludeSemantics` to prevent redundant or noisy screen reader readouts.
+**Action:** When creating or modifying custom interactive elements (especially toggles/checkboxes), always apply Semantics wrapping the interactive zone and ExcludeSemantics around the visual children.
