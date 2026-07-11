@@ -90,11 +90,16 @@ class _AnimatedTaskTileState extends State<AnimatedTaskTile>
               ),
           ],
         ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => widget.onToggle(!isCompleted),
-          child: Row(
-            children: [
+        child: Semantics(
+          checked: isCompleted,
+          button: true,
+          label: widget.task.title,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () => widget.onToggle(!isCompleted),
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
               // Checkbox
               AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -161,6 +166,8 @@ class _AnimatedTaskTileState extends State<AnimatedTaskTile>
                 ),
               ),
             ],
+          ),
+            ),
           ),
         ),
       ),
