@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:encrypt/encrypt.dart' as enc;
 import '../models/routine_task.dart';
 import 'storage_service.dart';
 
@@ -102,13 +104,39 @@ class HiveStorageService implements BaseStorage {
       'activity': {for (var k in _activityBox.keys) k.toString(): _activityBox.get(k)},
       'journal': {for (var k in _journalBox.keys) k.toString(): _journalBox.get(k)},
     };
-    return jsonEncode(data);
+    final jsonString = jsonEncode(data);
+
+    final keyBytes = await _getOrCreateEncryptionKey();
+    final key = enc.Key(Uint8List.fromList(keyBytes));
+    final iv = enc.IV.fromSecureRandom(16);
+    final encrypter = enc.Encrypter(enc.AES(key));
+
+    final encrypted = encrypter.encrypt(jsonString, iv: iv);
+    final finalBytes = [...iv.bytes, ...encrypted.bytes];
+
+    return base64Encode(finalBytes);
   }
 
   @override
   Future<bool> importData(String json) async {
     try {
-      final data = jsonDecode(json) as Map<String, dynamic>;
+      String jsonString = json;
+
+      if (!jsonString.trimLeft().startsWith('{')) {
+        final decodedBytes = base64Decode(jsonString);
+        final ivBytes = decodedBytes.sublist(0, 16);
+        final encryptedBytes = decodedBytes.sublist(16);
+
+        final keyBytes = await _getOrCreateEncryptionKey();
+        final key = enc.Key(Uint8List.fromList(keyBytes));
+        final iv = enc.IV(Uint8List.fromList(ivBytes));
+        final encrypter = enc.Encrypter(enc.AES(key));
+
+        final encrypted = enc.Encrypted(Uint8List.fromList(encryptedBytes));
+        jsonString = encrypter.decrypt(encrypted, iv: iv);
+      }
+
+      final data = jsonDecode(jsonString) as Map<String, dynamic>;
 
       if (data.containsKey('meta')) {
         await _metaBox.clear();
