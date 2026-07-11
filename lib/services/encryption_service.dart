@@ -21,7 +21,7 @@ class EncryptionService {
 
   String _generateRandomKey() {
     final random = Random.secure();
-    final values = List<int>.generate(32, (i) => random.nextInt(256));
-    return base64Url.encode(values).substring(0, 32);
+    final values = List<int>.generate(24, (i) => random.nextInt(256));
+    return base64Url.encode(values);
   }
 }
